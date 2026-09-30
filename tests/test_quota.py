@@ -1,9 +1,9 @@
 import unittest
 import sqlite3
-from quota import build_quota, period_observation
-from monitor import RATES
-import test_monitor as fixtures
-from test_monitor import meta,context,usage
+from token_tracker.quota import build_quota, period_observation
+from token_tracker.common import RATES
+from tests import test_monitor as fixtures
+from tests.test_monitor import meta,context,usage
 
 RESET=604800+100
 def sample(t,used,reset=RESET):

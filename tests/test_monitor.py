@@ -7,7 +7,9 @@ import urllib.request
 from datetime import datetime, timezone, timedelta
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-from monitor import Index, csv_text, Handler
+from token_tracker.indexer import Index
+from token_tracker.reports import csv_text
+from token_tracker.server import Handler
 
 def meta(sid, created='2026-09-29T10:00:00Z', parent=None):
     payload = dict(id=sid, timestamp=created, cwd='C:\\Users\\Example\\Documents\\ai_projects\\sample-project')

@@ -7,10 +7,10 @@ import sqlite3
 import threading
 from datetime import datetime
 from pathlib import Path
-from common import ClosingConnection, FIELDS, MSK, RATES, epoch, parent_id, synchronized
-from quota import build_quota
-from reports import Reports
-from projects import ProjectResolver, validate_root
+from .common import ClosingConnection, FIELDS, MSK, RATES, epoch, parent_id, synchronized
+from .quota import build_quota
+from .reports import Reports
+from .projects import ProjectResolver, validate_root
 
 def validate_record(event):
     """Validate data shapes at the boundary; programming errors still propagate."""

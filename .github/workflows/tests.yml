@@ -27,4 +27,8 @@ jobs:
           python-version: ${{ matrix.python }}
           allow-prereleases: false
       - name: Run all unit tests
-        run: python -m unittest discover -s . -p "test_*.py" -v
+        run: python -m unittest discover -s tests -t . -p "test_*.py" -v
+      - name: Check command-line entry points
+        run: |
+          python -m token_tracker --help
+          python -m token_tracker.demo --help

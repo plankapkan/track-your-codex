@@ -1,6 +1,7 @@
 param([switch]$NoBrowser, [int]$Port = 8766)
 $ErrorActionPreference = 'Stop'
-$monitorData = Join-Path $PSScriptRoot 'data'
+$monitorRoot = Split-Path -Parent $PSScriptRoot
+$monitorData = Join-Path $monitorRoot 'data'
 $monitorUrl = "http://127.0.0.1:$Port/"
 $monitorReady = $false
 try {
@@ -16,9 +17,8 @@ if (-not $monitorReady) {
         $monitorPython = (Get-Command python -ErrorAction Stop).Source
     }
     New-Item -ItemType Directory -Path $monitorData -Force | Out-Null
-    $monitorScript = Join-Path $PSScriptRoot 'monitor.py'
-    $monitorArgs = @(('"' + $monitorScript + '"'), '--data', ('"' + $monitorData + '"'), '--port', "$Port")
-    $monitorProcess = Start-Process -FilePath $monitorPython -ArgumentList $monitorArgs -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $monitorData 'monitor.log') -RedirectStandardError (Join-Path $monitorData 'monitor-error.log')
+    $monitorArgs = @('-m', 'token_tracker', '--data', ('"' + $monitorData + '"'), '--port', "$Port")
+    $monitorProcess = Start-Process -FilePath $monitorPython -ArgumentList $monitorArgs -WorkingDirectory $monitorRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $monitorData 'monitor.log') -RedirectStandardError (Join-Path $monitorData 'monitor-error.log')
     for ($monitorAttempt = 0; $monitorAttempt -lt 50; $monitorAttempt++) {
         Start-Sleep -Milliseconds 200
         try {

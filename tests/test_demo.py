@@ -8,7 +8,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-from demo import DemoHandler, build_demo
+from token_tracker.demo import DemoHandler, build_demo
 
 
 class DemoTests(unittest.TestCase):

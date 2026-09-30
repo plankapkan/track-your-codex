@@ -6,7 +6,7 @@ import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from indexer import Index
+from token_tracker.indexer import Index
 
 
 def measure(events=20000, files=20, repeats=3):

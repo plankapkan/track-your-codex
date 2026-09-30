@@ -37,7 +37,7 @@ CSV выгружается по выбранным датам, проекту и
 Это не фактический денежный счёт и не точный расход недельного лимита подписки. Fast/Ultrafast и прочие расходы здесь не учтены.
 В сравнении Astra → Sol 6.1 один и тот же объём токенов пересчитывается по двум тарифам.
 Изменение числа попыток и качества результата этим расчётом не измеряется.
-Источник: https://learn.chatgpt.com/docs/pricing#token-rates. Ставки явно хранятся в `RATES` в `monitor.py`, дата — `RATE_DATE`.
+Источник: https://learn.chatgpt.com/docs/pricing#token-rates. Ставки явно хранятся в `RATES` в `token_tracker/common.py`, дата — `RATE_DATE`.
 
 ## Процент недельного лимита
 
@@ -77,16 +77,16 @@ CSV включает `quota_pp` и `quota_covered_tokens`. Отсутствие 
 
 ```powershell
 # Запустить монитор без открытия браузера
-.\Start-monitor.ps1 -NoBrowser
+.\scripts\Start-monitor.ps1 -NoBrowser
 
 # Разово обновить базу и получить JSON/CSV в папке данных (монитор должен быть остановлен)
-python .\monitor.py --once --from 2026-09-25 --to 2026-09-29
+python -m token_tracker --once --from 2026-09-25 --to 2026-09-29
 
 # Другой каталог данных / другой порт / другой интервал
-python .\monitor.py --home C:\Users\your-name\.codex --data .\data --port 8766 --interval 30
+python -m token_tracker --home C:\Users\your-name\.codex --data .\data --port 8766 --interval 30
 
 # Проверки обработки журналов на синтетических данных
-python -m unittest -v test_monitor.py test_quota.py
+python -m unittest -v tests.test_monitor tests.test_quota
 ```
 
 Монитор слушает только 127.0.0.1. Управление аккаунтом и настройками Codex не выполняется.

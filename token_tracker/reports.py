@@ -3,8 +3,8 @@ import csv
 import io
 from collections import defaultdict
 from datetime import datetime, timedelta
-from common import MSK, RATE_DATE, RATES, blank, add, cost, synchronized
-from quota import period_observation
+from .common import MSK, RATE_DATE, RATES, blank, add, cost, synchronized
+from .quota import period_observation
 
 class Reports:
     @synchronized

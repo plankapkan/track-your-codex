@@ -8,7 +8,7 @@ See which Codex chats, projects and models use the most tokens. Runs on your com
 
 ## Run
 
-Requires Python 3.10+ and local Codex logs. Download and extract the release ZIP, or clone:
+Requires Python 3.10+ and local Codex logs. Run terminal commands from the project folder. Download and extract the release ZIP, or clone:
 
 ```sh
 git clone https://github.com/plankapkan/track-your-codex.git
@@ -17,9 +17,11 @@ cd track-your-codex
 
 **Windows:** double-click `Start-monitor.cmd`. Stop with `Stop-monitor.cmd`. The launcher also works with Codex's bundled Python.
 
-**macOS / Linux:** run `python3 monitor.py`, then open [localhost:8766](http://127.0.0.1:8766/). Stop with Ctrl+C. These platforms have not yet been verified.
+**macOS / Linux:** run `python3 -m token_tracker`, then open [localhost:8766](http://127.0.0.1:8766/). Stop with Ctrl+C. Automated tests run on all three platforms; the browser interface has been checked manually on Windows.
 
-**Try with example data:** run `python demo.py` (`python3 demo.py` on macOS / Linux). It opens a separate dashboard without reading your Codex logs. Stop with Ctrl+C.
+**Try with example data:** run `python -m token_tracker.demo` (`python3 -m token_tracker.demo` on macOS / Linux). It opens a separate dashboard without reading your Codex logs. Stop with Ctrl+C.
+
+Upgrading from v0.2.0? Follow the [migration steps](docs/troubleshooting.md#upgrading-from-v020).
 
 ## What it shows
 

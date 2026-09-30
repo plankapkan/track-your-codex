@@ -9,9 +9,10 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-from monitor import Index, Handler
-from projects import ProjectResolver, FolderPickerUnavailable, pick_folder
-from test_monitor import meta, context, usage, plus
+from token_tracker.indexer import Index
+from token_tracker.server import Handler
+from token_tracker.projects import ProjectResolver, FolderPickerUnavailable, pick_folder
+from tests.test_monitor import meta, context, usage, plus
 
 
 class BackendTests(unittest.TestCase):
@@ -78,7 +79,7 @@ class BackendTests(unittest.TestCase):
 
     def test_programming_errors_are_not_silently_skipped(self):
         self.write([meta('test')])
-        with patch('indexer.validate_record', side_effect=RuntimeError('programming bug')):
+        with patch('token_tracker.indexer.validate_record', side_effect=RuntimeError('programming bug')):
             with self.assertRaisesRegex(RuntimeError, 'programming bug'):
                 self.index.scan()
 
@@ -86,7 +87,7 @@ class BackendTests(unittest.TestCase):
         self.write([meta('test'), context(), self.event(1)])
         self.index.scan()
         first_cache = self.index.quota_cache
-        with patch('indexer.build_quota', side_effect=AssertionError('Unnecessary rebuild')):
+        with patch('token_tracker.indexer.build_quota', side_effect=AssertionError('Unnecessary rebuild')):
             self.index.scan()
             self.report()
             self.index.set_settings(None)
@@ -221,18 +222,18 @@ class BackendTests(unittest.TestCase):
                 return original_resolve(path, strict=strict)
             return canonical_root / suffix
         resolver = ProjectResolver(str(canonical_root))
-        with patch('projects.Path.resolve', autospec=True, side_effect=resolve) as canonical:
+        with patch('token_tracker.projects.Path.resolve', autospec=True, side_effect=resolve) as canonical:
             self.assertEqual(resolver.resolve(str(cwd)), 'one')
             self.assertEqual(resolver.resolve(str(cwd)), 'one')
             canonical.assert_called_once_with(cwd, strict=False)
 
     def test_project_root_preserves_foreign_and_historical_lexical_paths(self):
         historical = ProjectResolver(str(self.root / 'removed-projects'))
-        with patch('projects.Path.resolve', side_effect=AssertionError('Lexical match needs no filesystem')):
+        with patch('token_tracker.projects.Path.resolve', side_effect=AssertionError('Lexical match needs no filesystem')):
             self.assertEqual(historical.resolve(str(self.root / 'removed-projects' / 'one' / 'src')), 'one')
         # A path from another OS must not be resolved against the current OS.
         foreign = 'C:\\foreign\\projects' if Path('/').is_absolute() else '/foreign/projects'
-        with patch('projects.Path.resolve', side_effect=AssertionError('Foreign path accessed')):
+        with patch('token_tracker.projects.Path.resolve', side_effect=AssertionError('Foreign path accessed')):
             resolver = ProjectResolver(foreign)
             self.assertEqual(resolver.resolve(foreign + '/one/src'), 'one')
             self.assertEqual(resolver.resolve(foreign + '-other/two'), 'Без проекта')
@@ -266,7 +267,7 @@ class BackendTests(unittest.TestCase):
         with index.connect() as con:
             self.assertEqual([tuple(r) for r in con.execute('SELECT path,offset FROM files')], offsets)
         # The migration marker prevents regrouping on every startup.
-        with patch('projects.ProjectResolver.resolve', side_effect=AssertionError('Repeated migration')):
+        with patch('token_tracker.projects.ProjectResolver.resolve', side_effect=AssertionError('Repeated migration')):
             Index(self.home, self.root / 'data')
 
     def test_settings_and_picker_http_and_security(self):
@@ -296,12 +297,12 @@ class BackendTests(unittest.TestCase):
                 self.assertEqual(request('/api/settings'), (200, {'projects_root': None}))
                 self.assertEqual(request('/api/settings', {'projects_root': str(self.root)})[0], 200)
                 before = self.index.get_settings()
-                with patch('server.pick_folder', return_value=None):
+                with patch('token_tracker.server.pick_folder', return_value=None):
                     self.assertEqual(request('/api/projects/pick', {}), (200, dict(**before, cancelled=True)))
-                with patch('server.pick_folder', return_value=str(self.home)):
+                with patch('token_tracker.server.pick_folder', return_value=str(self.home)):
                     self.assertEqual(request('/api/projects/pick', {}),
                                      (200, dict(projects_root=str(self.home.resolve()), cancelled=False)))
-                with patch('server.pick_folder', side_effect=FolderPickerUnavailable('unavailable')):
+                with patch('token_tracker.server.pick_folder', side_effect=FolderPickerUnavailable('unavailable')):
                     code, body = request('/api/projects/pick', {})
                     self.assertEqual(code, 503)
                     self.assertEqual(body['code'], 'folder_picker_unavailable')
@@ -321,10 +322,10 @@ class BackendTests(unittest.TestCase):
 
     def test_picker_timeout_and_bad_result_are_unavailable(self):
         import subprocess
-        with patch('projects.subprocess.run', side_effect=subprocess.TimeoutExpired('picker', 120)):
+        with patch('token_tracker.projects.subprocess.run', side_effect=subprocess.TimeoutExpired('picker', 120)):
             with self.assertRaises(FolderPickerUnavailable):
                 pick_folder()
-        with patch('projects.subprocess.run', return_value=subprocess.CompletedProcess([], 0, 'broken', '')):
+        with patch('token_tracker.projects.subprocess.run', return_value=subprocess.CompletedProcess([], 0, 'broken', '')):
             with self.assertRaises(FolderPickerUnavailable):
                 pick_folder()
 

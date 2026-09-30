@@ -7,7 +7,8 @@ from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
-from monitor import Handler, Index
+from .server import Handler
+from .indexer import Index
 
 
 def build_demo(root, now=None):

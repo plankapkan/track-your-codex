@@ -4,9 +4,9 @@ from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
-from common import MSK
-from reports import csv_text
-from projects import pick_folder, FolderPickerUnavailable
+from .common import MSK
+from .reports import csv_text
+from .projects import pick_folder, FolderPickerUnavailable
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -31,7 +31,7 @@ class Handler(BaseHTTPRequestHandler):
         assets = {'/': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/theme.js': ('theme.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'), '/i18n.js': ('i18n.js', 'text/javascript'), '/charts.js': ('charts.js', 'text/javascript')}
         if url.path in assets:
             name, mime = assets[url.path]
-            self.send(200, (Path(__file__).parent / name).read_bytes(), mime + '; charset=utf-8')
+            self.send(200, (Path(__file__).resolve().parent / 'web' / name).read_bytes(), mime + '; charset=utf-8')
             return
         if url.path == '/api/health':
             self.send(200, json.dumps(dict(service='codex-usage-monitor', index=self.server.index.status)), 'application/json; charset=utf-8')

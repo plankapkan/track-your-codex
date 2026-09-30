@@ -6,11 +6,12 @@ import threading
 from datetime import datetime, timedelta
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-# Compatibility exports for existing scripts and tests.
-from common import MSK, FIELDS, METRICS, RATE_DATE, RATES, epoch, project, parent_id, blank, add, cost, ClosingConnection
-from indexer import Index
-from reports import csv_text
-from server import Handler
+from .common import MSK
+from .indexer import Index
+from .reports import csv_text
+from .server import Handler
+
+DEFAULT_DATA = Path(__file__).resolve().parents[1] / 'data'
 
 class RunLock:
     def __init__(self, path):
@@ -31,15 +32,20 @@ class RunLock:
     def close(self):
         self.stream.close()
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--home', type=Path, default=Path.home()/'.codex')
-    parser.add_argument('--data', type=Path, default=Path(__file__).resolve().parent/'data')
+    parser.add_argument('--data', type=Path, default=DEFAULT_DATA)
     parser.add_argument('--port', type=int, default=8766)
     parser.add_argument('--interval', type=int, default=30)
     parser.add_argument('--once', action='store_true')
     parser.add_argument('--from', dest='start')
     parser.add_argument('--to', dest='end')
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
     if args.interval < 5:
         parser.error('--interval must be at least 5 seconds')
