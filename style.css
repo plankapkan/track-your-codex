@@ -102,3 +102,18 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .theme-toggle[aria-checked=true] .theme-thumb{transform:translateX(0);background:linear-gradient(145deg,#fff,#e9e9e9)}
 .theme-toggle[aria-checked=true] .theme-sun{opacity:0}.theme-toggle[aria-checked=true] .theme-moon{opacity:1}
 @media(prefers-reduced-motion:reduce){.theme-toggle,.theme-toggle svg,.theme-thumb{transition:none}}
+
+.filter-toolbar{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px;align-items:stretch;margin:12px 0}
+.filter-toolbar #filters{margin:0;min-width:0}
+.project-settings{margin-top:0;padding:10px 14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.project-settings-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.project-root-info{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 240px}
+.project-root-current{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.project-settings-actions{display:flex;flex-wrap:wrap;gap:6px}.project-settings-actions button{padding:7px 10px;font-size:12px}
+.project-root-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px;margin-top:12px}.project-root-form[hidden]{display:none}
+.project-root-form label{flex:1 1 300px;min-width:0}.project-root-form input{width:100%}.project-root-form .note{flex-basis:100%;margin:0}
+.project-settings>p{margin:8px 0 0}#project-root-error{color:var(--danger)}
+.project-settings button:disabled{opacity:.5;cursor:wait}
+@media(max-width:650px){.project-settings-actions{width:100%}.project-root-form label{flex-basis:100%}}
+
+@media(max-width:1100px){.filter-toolbar{grid-template-columns:1fr}}

@@ -28,4 +28,4 @@
 
 Монитор работает на `127.0.0.1`, не меняет базу Codex, не читает `auth.json` и не обращается к моделям. Сохраняет локально счётчики и сведения о чатах, без текстов сообщений.
 
-[Если не запускается](docs/troubleshooting.md) · [Как считаются данные](docs/accounting.md) · [Лицензия MIT](LICENSE)
+[Если не запускается](docs/troubleshooting.md) · [Разработка (English)](docs/development.md) · [Как считаются данные](docs/accounting.md) · [Лицензия MIT](LICENSE)

@@ -33,4 +33,4 @@ Account percentages come from snapshots in local logs. Shares marked **≈** are
 
 The monitor runs on `127.0.0.1`, reads Codex's database without changing it and never reads `auth.json`. It makes no model calls. Its local database stores counters and chat metadata, not message text.
 
-[Troubleshooting](docs/troubleshooting.md) · [Accounting details (Russian)](docs/accounting.md) · [MIT license](LICENSE)
+[Troubleshooting](docs/troubleshooting.md) · [Development](docs/development.md) · [Accounting details (Russian)](docs/accounting.md) · [MIT license](LICENSE)
