@@ -9,6 +9,7 @@ let periodMode = 'cycle';
 let periodHours = 168;
 let customRange = null;
 let chatPage = 1, chatPageSize = '10', chatFilterKey = null;
+const expandedChatRows = new Set();
 try { chatPageSize = localStorage.getItem('codex-chat-page-size') || '10'; } catch {}
 if (!['10','50','100','all'].includes(chatPageSize)) chatPageSize = '10';
 let refreshSerial = 0;
@@ -49,24 +50,54 @@ function options(id, values, label) {
   select.value = values.includes(selected) ? selected : '';
 }
 function cell(tr, text) { const td = document.createElement('td'); td.textContent = text; tr.append(td); return td; }
+function compareWeeklyQuota(a, b) {
+  // Match quotaText: rows without an estimate follow estimated rows.
+  const rank = row => row.quota_covered_tokens && row.quota_pp > 0 ? row.quota_pp : -1;
+  const identity = row => [row.id ?? row.thread ?? '', row.model ?? '', row.effort ?? ''].join('|');
+  return rank(b)-rank(a) || b.total-a.total || identity(a).localeCompare(identity(b));
+}
 function renderChats() {
   if (!current) return;
   const term = $('search').value.toLocaleLowerCase(); $('chats').replaceChildren();
   const filterKey = query().toString()+'|'+term;
   if (filterKey !== chatFilterKey) { chatPage = 1; chatFilterKey = filterKey; }
-  const rows = current.chats.filter(row => !term || (row.title+' '+row.thread+' '+row.project).toLocaleLowerCase().includes(term));
+  const rows = current.chats.filter(row => !term || (row.title+' '+row.thread+' '+row.project).toLocaleLowerCase().includes(term)).sort(compareWeeklyQuota);
   const size = chatPageSize === 'all' ? Math.max(1,rows.length) : Number(chatPageSize);
   const pages = Math.max(1,Math.ceil(rows.length/size));
   chatPage = Math.min(chatPage,pages);
   const start = (chatPage-1)*size;
+  const chatModels = new Map();
+  for (const row of current.chats) {
+    if (!chatModels.has(row.thread)) chatModels.set(row.thread,new Map());
+    const models = chatModels.get(row.thread);
+    if (!models.has(row.model)) models.set(row.model,{model:row.model,total:0,fresh:0,cached:0,output:0,quota_pp:0,quota_covered_tokens:0});
+    const model = models.get(row.model);
+    for (const field of ['total','fresh','cached','output','quota_pp','quota_covered_tokens']) model[field] += row[field] ?? 0;
+  }
   for (const row of rows.slice(start,start+size)) {
     const tr = document.createElement('tr'); const td = cell(tr, '');
-    const link = document.createElement('a'); link.href = 'codex://threads/'+encodeURIComponent(row.thread); link.textContent = row.title; link.className = 'chat-title'; td.append(link);
+    const key = JSON.stringify([row.thread,row.model,row.effort]);
+    const button = document.createElement('button'); button.type='button'; button.textContent=row.title; button.className='chat-title chat-expand'; td.append(button);
     const meta = document.createElement('span'); meta.textContent = t(row.project)+' · '+row.thread; meta.className = 'chat-meta'; td.append(meta);
     cell(tr, row.model+' / '+row.effort); cell(tr,number(row.main_calls)+' / '+number(row.subagent_calls));
     for (const key of ['fresh','cached','output','total']) cell(tr,number(row[key]));
     cell(tr,credits(row.estimated_credits)); $('chats').append(tr);
     cell(tr,quotaText(row));
+    const detail = document.createElement('tr'); detail.className='chat-detail';
+    const reportCell = cell(detail,''); reportCell.colSpan=9;
+    const link = document.createElement('a'); link.href='codex://threads/'+encodeURIComponent(row.thread); link.textContent=row.title+' ↗'; link.className='chat-open'; reportCell.append(link,modelReport(chatModels.get(row.thread).values()));
+    detail.id='chat-models-'+(start+$('chats').querySelectorAll('.chat-expand').length);
+    button.setAttribute('aria-controls',detail.id);
+    const updateExpanded = () => {
+      const open = expandedChatRows.has(key);
+      button.setAttribute('aria-expanded',String(open)); detail.hidden=!open;
+    };
+    tr.className='chat-row';
+    tr.addEventListener('click', () => {
+      if (expandedChatRows.has(key)) expandedChatRows.delete(key); else expandedChatRows.add(key);
+      updateExpanded();
+    });
+    updateExpanded(); $('chats').append(detail);
   }
   $('empty').hidden = $('chats').children.length > 0;
   $('chat-page-info').textContent = t`Строки ${number(rows.length?start+1:0)}–${number(Math.min(start+size,rows.length))} из ${number(rows.length)}`;
@@ -87,6 +118,84 @@ function renderChats() {
     }
     addButton(t('Далее'),chatPage+1,chatPage===pages);
   }
+}
+// Sum existing globally allocated shares; filters must not renormalize them.
+function rankingGroups(rows, key) {
+  const groups = new Map();
+  for (const row of rows) {
+    const id = row[key];
+    if (!groups.has(id)) groups.set(id, {id, title:key==='project'?t(id):row.title, project:row.project, total:0, quota_pp:0, quota_covered_tokens:0, models:new Map()});
+    const group = groups.get(id);
+    if (!group.models.has(row.model)) group.models.set(row.model, {model:row.model,total:0,fresh:0,cached:0,output:0,quota_pp:0,quota_covered_tokens:0});
+    const model = group.models.get(row.model);
+    for (const field of ['total','quota_pp','quota_covered_tokens']) group[field] += row[field] ?? 0;
+    for (const field of ['total','fresh','cached','output','quota_pp','quota_covered_tokens']) model[field] += row[field] ?? 0;
+  }
+  return [...groups.values()].sort(compareWeeklyQuota).slice(0,10);
+}
+function modelReport(models) {
+  const report=document.createElement('div');report.className='ranking-report table-wrap';
+  const table=document.createElement('table');const head=document.createElement('thead');const headers=document.createElement('tr');
+  for(const label of [t('Модель'),t('Новый вход'),t('Кеш'),t('Выход'),t('Всего токенов'),t('Недельный лимит ≈')]) {const th=document.createElement('th');th.textContent=label;headers.append(th);}
+  head.append(headers);table.append(head);
+  const body=document.createElement('tbody');
+  for(const model of [...models].sort(compareWeeklyQuota)) {
+    const tr=document.createElement('tr');cell(tr,model.model);
+    for(const field of ['fresh','cached','output','total']) cell(tr,number(model[field]));
+    cell(tr,quotaText(model));body.append(tr);
+  }
+  table.append(body);report.append(table);
+  return report;
+}
+function sizeRankings() {
+  const section = document.querySelector('.usage-rankings');
+  const panels = [...section.querySelectorAll('.ranking-panel')];
+  if (getComputedStyle(section).gridTemplateColumns.split(' ').length < 2) {
+    section.style.removeProperty('--ranking-height');
+    return;
+  }
+  // Measure unconstrained content, including expanded model reports.
+  const heights = panels.map(panel => {
+    const viewport = panel.querySelector('.ranking-viewport');
+    const list = viewport.firstElementChild;
+    return list.getBoundingClientRect().height + panel.getBoundingClientRect().height - viewport.getBoundingClientRect().height;
+  });
+  section.style.setProperty('--ranking-height', Math.ceil(Math.min(...heights))+'px');
+}
+const rankingResizeObserver = new ResizeObserver(sizeRankings);
+window.addEventListener('resize', sizeRankings);
+function renderRankings(data) {
+  rankingResizeObserver.disconnect();
+  for (const [target,key] of [['top-projects','project'],['top-chats','thread']]) {
+    const viewport = $(target);
+    const opened = new Set([...viewport.querySelectorAll('details[open]')].map(item=>item.dataset.id));
+    const scrollTop = viewport.scrollTop;
+    const container = document.createElement('div'); container.className='ranking-list';
+    viewport.replaceChildren(container);
+    rankingResizeObserver.observe(container);
+    const rows = rankingGroups(data.chats,key);
+    if (!rows.length) {
+      const empty=document.createElement('p'); empty.className='note'; empty.textContent=t('За этот период данных нет.'); container.append(empty); continue;
+    }
+    const headings=document.createElement('div'); headings.className='ranking-columns';
+    for (const label of ['',t('Всего токенов'),t('Недельный лимит ≈')]) {const span=document.createElement('span');span.textContent=label;headings.append(span);}
+    container.append(headings);
+    rows.forEach((row,index)=>{
+      const item=document.createElement('details');item.className='ranking-item';item.dataset.id=String(row.id);item.open=opened.has(String(row.id));
+      const summary=document.createElement('summary');summary.className='ranking-row';
+      const name=document.createElement('span');name.className='ranking-name';
+      const rank=document.createElement('span');rank.className='ranking-position';rank.textContent=String(index+1);
+      const title=document.createElement('span');title.className='ranking-title';title.textContent=row.title;
+      if(key==='thread') {const meta=document.createElement('small');meta.textContent=t(row.project);title.append(meta);}
+      name.append(rank,title);
+      const tokens=document.createElement('strong');tokens.textContent=number(row.total);
+      const quota=document.createElement('span');quota.className='ranking-quota';quota.textContent=quotaText(row);
+      summary.append(name,tokens,quota);
+      item.append(summary,modelReport(row.models.values()));container.append(item);
+    });
+    viewport.scrollTop = scrollTop;
+  }
+  sizeRankings();
 }
 async function refresh() {
   if (!$('filters').reportValidity()) return;
@@ -114,6 +223,7 @@ function render(data) {
     $('models').replaceChildren();
     for (const row of data.models) { const tr=document.createElement('tr'); cell(tr,row.model+' / '+row.effort); for (const key of ['calls','fresh','cached','output','total']) cell(tr,number(row[key])); cell(tr,credits(row.estimated_credits));cell(tr,quotaText(row)); $('models').append(tr); }
     renderChats();
+    renderRankings(data);
     renderQuota(data);
     const pricing=data.pricing;
     $('snapshot').textContent=t('Период')+': '+dateTime(new Date(data.range.first_time*1000))+' — '+dateTime(new Date(data.range.final_time*1000))+t(' МСК')+' · '+t('Последний проход')+': '+(data.snapshot?dateTime(new Date(data.snapshot)):t('выполняется'));
@@ -181,13 +291,12 @@ $('custom-apply').addEventListener('click',()=>{
 });
 $('export-chats').addEventListener('click',()=>download('chats'));$('export-models').addEventListener('click',()=>download('models'));
 function renderQuota(data) {
-  const quota=data.quota;$('quota-cards').replaceChildren();$('chat-quota-card').replaceChildren();
+  const quota=data.quota;$('quota-cards').replaceChildren();
   const currentUsed=quota.latest?.used_percent;
   const remainingText=amount=>percent(Math.max(0,100-amount));
   const cards=[
     {kind:'account',label:t('Остаток · аккаунт'),amount:currentUsed,text:currentUsed==null?t('Нет снимка'):remainingText(currentUsed),detail:currentUsed==null?t('Нет снимка оставшегося лимита'):t('По показаниям OpenAI')},
     {kind:'period',label:t('Потрачено за период'),amount:quota.latest?quota.period.observed_growth_pp:null,text:quota.latest?percent(quota.period.observed_growth_pp):t('Нет снимка'),detail:t('С учётом сбросов · 100% = один недельный лимит')},
-    {kind:'estimate',label:t('Остаток после выбранных чатов · оценка'),amount:data.summary.quota_covered_tokens&&data.summary.quota_pp?data.summary.quota_pp:null,text:data.summary.quota_covered_tokens&&data.summary.quota_pp?'≈ '+remainingText(data.summary.quota_pp):t('Нет оценки'),detail:t('100% минус оценка выбранных чатов')}
   ];
   for(const [index,item] of cards.entries()){
     const card=document.createElement('article');card.className='quota-meter quota-meter-'+item.kind;
@@ -207,7 +316,7 @@ function renderQuota(data) {
     const footer=document.createElement('div');footer.className='quota-meter-footer';
     const detail=document.createElement('span');detail.textContent=!spent&&known&&item.amount>100?t('Расход превысил недельный лимит'):item.detail;
     const scale=document.createElement('span');scale.textContent='0–'+maximum+'%';scale.setAttribute('aria-hidden','true');footer.append(detail,scale);
-    card.append(heading,track,footer);$(item.kind==='estimate'?'chat-quota-card':'quota-cards').append(card);
+    card.append(heading,track,footer);$('quota-cards').append(card);
   }
   const coverage=data.summary.total?data.summary.quota_covered_tokens/data.summary.total*100:0;
   const latestTime=quota.latest?dateTime(new Date(quota.latest.timestamp*1000)):t('нет снимка');

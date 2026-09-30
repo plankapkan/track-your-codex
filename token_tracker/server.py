@@ -22,6 +22,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def send(self, code, body, content_type):
         encoded = body.encode('utf-8') if isinstance(body, str) else body
+        try:
+            self._send_encoded(code, encoded, content_type)
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            # A browser can cancel a request while its response is being sent.
+            # Do not attempt a second response on the disconnected socket.
+            self.close_connection = True
+
+    def _send_encoded(self, code, encoded, content_type):
         self.send_response(code)
         self.send_header('Content-Type', content_type)
         self.send_header('Content-Length', str(len(encoded)))

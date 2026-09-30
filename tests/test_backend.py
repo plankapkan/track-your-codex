@@ -1,17 +1,60 @@
 """Regression coverage for record isolation, caching, snapshots and settings."""
 import json
+import io
 import tempfile
 import threading
 import unittest
 import urllib.request
 import urllib.error
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from token_tracker.indexer import Index
 from token_tracker.server import Handler, LocalHTTPServer
 from token_tracker.projects import ProjectResolver, FolderPickerUnavailable, pick_folder
 from tests.test_monitor import meta, context, usage, plus
+
+
+class ResponseDisconnectTests(unittest.TestCase):
+    def handler(self):
+        handler = Handler.__new__(Handler)
+        handler.headers = {'Host': '127.0.0.1:8766',
+                           'Content-Type': 'application/json', 'Content-Length': '23'}
+        handler.server = Mock(allowed_hosts={'127.0.0.1:8766'})
+        handler.server.index.get_settings.return_value = {'projects_root': None}
+        handler.server.index.set_settings.return_value = {'projects_root': None}
+        handler.server.index.report.return_value = {}
+        handler.send_response = Mock()
+        handler.send_header = Mock()
+        handler.end_headers = Mock()
+        handler.wfile = Mock()
+        handler.rfile = io.BytesIO(b'{"projects_root": null}')
+        handler.connection = Mock()
+        handler.close_connection = False
+        return handler
+
+    def test_cancelled_responses_do_not_retry_or_escape(self):
+        for method, path in (('GET', '/api/settings'), ('GET', '/api/usage'),
+                             ('POST', '/api/settings')):
+            for phase in ('headers', 'body'):
+                for error in (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+                    with self.subTest(method=method, path=path, phase=phase, error=error):
+                        handler = self.handler()
+                        handler.path = path
+                        failing_write = handler.end_headers if phase == 'headers' else handler.wfile.write
+                        failing_write.side_effect = error('Client disconnected')
+                        getattr(handler, 'do_' + method)()
+                        handler.send_response.assert_called_once_with(200)
+                        failing_write.assert_called_once()
+                        self.assertTrue(handler.close_connection)
+                        if phase == 'headers':
+                            handler.wfile.write.assert_not_called()
+
+    def test_other_send_errors_remain_visible(self):
+        handler = self.handler()
+        handler.wfile.write.side_effect = OSError('Unexpected write failure')
+        with self.assertRaisesRegex(OSError, 'Unexpected write failure'):
+            handler.send(200, 'response', 'text/plain')
 
 
 class BackendTests(unittest.TestCase):
