@@ -4,11 +4,11 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
 from token_tracker.demo import DemoHandler, build_demo
+from token_tracker.server import LocalHTTPServer
 
 
 class DemoTests(unittest.TestCase):
@@ -33,7 +33,7 @@ class DemoTests(unittest.TestCase):
     def test_demo_page_labels_fictional_data_and_keeps_host_protection(self):
         with tempfile.TemporaryDirectory() as directory:
             index = build_demo(Path(directory))
-            with ThreadingHTTPServer(('127.0.0.1', 0), DemoHandler) as server:
+            with LocalHTTPServer(('127.0.0.1', 0), DemoHandler) as server:
                 port = server.server_address[1]
                 server.index = index
                 server.allowed_hosts = {f'127.0.0.1:{port}'}

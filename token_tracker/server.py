@@ -1,12 +1,20 @@
 """Loopback HTTP dashboard and settings endpoints."""
 import json
 from datetime import datetime, timedelta
-from http.server import BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from socketserver import TCPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from .common import MSK
 from .reports import csv_text
 from .projects import pick_folder, FolderPickerUnavailable
+
+class LocalHTTPServer(ThreadingHTTPServer):
+    """Bind numeric loopback without HTTPServer's reverse DNS metadata lookup."""
+    def server_bind(self):
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):

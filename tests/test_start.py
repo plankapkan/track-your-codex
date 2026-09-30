@@ -16,6 +16,7 @@ from unittest.mock import patch
 from urllib.parse import urlparse
 
 from token_tracker.cli import main
+from token_tracker.server import Handler, LocalHTTPServer
 from tests.test_monitor import meta, context, usage
 from tests.test_packaging import REPO_ROOT
 
@@ -92,6 +93,20 @@ class StartTests(unittest.TestCase):
         self.assertTrue((self.data / 'report.json').is_file())
         self.assertFalse((self.data / 'running.json').exists())
 
+    def test_numeric_loopback_bind_and_monitor_start_do_not_resolve_names(self):
+        # A slow or unavailable DNS service must not delay local startup.
+        with contextlib.ExitStack() as stack:
+            for name in ('getfqdn', 'gethostbyaddr', 'gethostbyname', 'getaddrinfo'):
+                stack.enter_context(patch(f'socket.{name}', side_effect=AssertionError(f'DNS called: {name}')))
+            with LocalHTTPServer(('127.0.0.1', 0), Handler) as server:
+                self.assertEqual(server.server_name, '127.0.0.1')
+                self.assertEqual(server.server_port, server.server_address[1])
+                self.assertGreater(server.server_port, 0)
+            with patch('token_tracker.cli.LocalHTTPServer.handle_request', autospec=True,
+                       side_effect=self.stop_request), contextlib.redirect_stdout(io.StringIO()):
+                main(self.args + ['--no-browser'])
+            self.assertFalse((self.data / 'running.json').exists())
+
     def stop_request(self, server):
         (self.data / 'stop').touch()
 
@@ -110,7 +125,7 @@ class StartTests(unittest.TestCase):
                 (False, [], False), (False, ['--open-browser'], True)):
             with self.subTest(default=launcher_default, flags=flags):
                 with patch('token_tracker.cli.webbrowser.open', side_effect=open_after_start) as browser, \
-                     patch('token_tracker.cli.ThreadingHTTPServer.handle_request', autospec=True,
+                     patch('token_tracker.cli.LocalHTTPServer.handle_request', autospec=True,
                            side_effect=self.stop_request), contextlib.redirect_stdout(io.StringIO()):
                     main(self.args + flags, open_browser=launcher_default)
                 self.assertEqual(browser.call_count, int(should_open))
@@ -118,7 +133,7 @@ class StartTests(unittest.TestCase):
 
     def test_browser_failure_does_not_stop_server_and_ctrl_c_releases_lock(self):
         with patch('token_tracker.cli.webbrowser.open', side_effect=RuntimeError('browser unavailable')) as browser, \
-             patch('token_tracker.cli.ThreadingHTTPServer.handle_request', side_effect=KeyboardInterrupt) as handle, \
+             patch('token_tracker.cli.LocalHTTPServer.handle_request', side_effect=KeyboardInterrupt) as handle, \
              contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as stderr:
             main(self.args, open_browser=True)
         browser.assert_called_once()
@@ -140,7 +155,7 @@ class StartTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 main(self.args + ['--interval', '0'], open_browser=True)
             main(self.args + ['--once'], open_browser=True)
-            with patch('token_tracker.cli.ThreadingHTTPServer', side_effect=OSError('port in use')):
+            with patch('token_tracker.cli.LocalHTTPServer', side_effect=OSError('port in use')):
                 with self.assertRaises(SystemExit) as bind_exit:
                     main(self.args, open_browser=True)
             self.assertEqual(bind_exit.exception.code, 2)

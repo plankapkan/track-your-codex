@@ -7,13 +7,12 @@ import tempfile
 import threading
 import unittest
 import urllib.request
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
 import token_tracker
 from token_tracker.indexer import Index
-from token_tracker.server import Handler
+from token_tracker.server import Handler, LocalHTTPServer
 from token_tracker.projects import pick_folder
 from tests.test_monitor import meta, context, usage
 
@@ -65,7 +64,7 @@ class PackagingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             index = Index(root / 'home', root / 'data')
-            with ThreadingHTTPServer(('127.0.0.1', 0), Handler) as server:
+            with LocalHTTPServer(('127.0.0.1', 0), Handler) as server:
                 port = server.server_address[1]
                 server.index = index
                 server.allowed_hosts = {f'127.0.0.1:{port}'}

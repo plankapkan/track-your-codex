@@ -4,10 +4,9 @@ import json
 import tempfile
 import webbrowser
 from datetime import datetime, timedelta, timezone
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 
-from .server import Handler
+from .server import Handler, LocalHTTPServer
 from .indexer import Index
 
 
@@ -83,7 +82,7 @@ def main():
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='track-your-codex-demo-') as directory:
         index = build_demo(Path(directory))
-        with ThreadingHTTPServer(('127.0.0.1', args.port), DemoHandler) as server:
+        with LocalHTTPServer(('127.0.0.1', args.port), DemoHandler) as server:
             port = server.server_address[1]
             server.index = index
             server.allowed_hosts = {f'127.0.0.1:{port}', f'localhost:{port}'}

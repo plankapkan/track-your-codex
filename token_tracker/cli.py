@@ -6,12 +6,11 @@ import threading
 import sys
 import webbrowser
 from datetime import datetime, timedelta
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from .common import MSK
 from .indexer import Index
 from .reports import csv_text
-from .server import Handler
+from .server import Handler, LocalHTTPServer
 
 DEFAULT_DATA = Path(__file__).resolve().parents[1] / 'data'
 
@@ -74,7 +73,7 @@ def main(argv=None, *, open_browser=False):
             print(json.dumps(dict(summary=result['summary'], index=result['index'], diagnostics=result['diagnostics']), ensure_ascii=True))
             return
         try:
-            server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
+            server = LocalHTTPServer(('127.0.0.1', args.port), Handler)
         except OSError as exc:
             parser.error(f'Cannot start local server: {exc}')
         with server:

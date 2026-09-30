@@ -5,11 +5,10 @@ import threading
 import time
 import urllib.request
 from datetime import datetime, timezone, timedelta
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from token_tracker.indexer import Index
 from token_tracker.reports import csv_text
-from token_tracker.server import Handler
+from token_tracker.server import Handler, LocalHTTPServer
 
 def meta(sid, created='2026-09-29T10:00:00Z', parent=None):
     payload = dict(id=sid, timestamp=created, cwd='C:\\Users\\Example\\Documents\\ai_projects\\sample-project')
@@ -186,7 +185,7 @@ class MonitorTests(unittest.TestCase):
     def test_http_filtered_export_and_host_check(self):
         self.write('a.jsonl',[meta('a'),context(),usage('2026-09-29T10:01:00Z',10,90,5)])
         self.index.scan()
-        server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
+        server=LocalHTTPServer(('127.0.0.1',0),Handler)
         server.index=self.index
         port=server.server_port
         server.allowed_hosts={f'127.0.0.1:{port}'}
@@ -243,7 +242,7 @@ class MonitorTests(unittest.TestCase):
                 point(4*3600,7),point(3000,8),point(2400,8),point(1800,8),
                 point(1200,9),point(600,0,2),point(60,1,2)]
         self.index.quota_cache=dict(curve=points)
-        server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
+        server=LocalHTTPServer(('127.0.0.1',0),Handler)
         server.index=self.index
         server.allowed_hosts={f'127.0.0.1:{server.server_port}'}
         worker=threading.Thread(target=server.serve_forever,daemon=True)

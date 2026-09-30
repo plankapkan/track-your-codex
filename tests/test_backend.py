@@ -5,12 +5,11 @@ import threading
 import unittest
 import urllib.request
 import urllib.error
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
 from token_tracker.indexer import Index
-from token_tracker.server import Handler
+from token_tracker.server import Handler, LocalHTTPServer
 from token_tracker.projects import ProjectResolver, FolderPickerUnavailable, pick_folder
 from tests.test_monitor import meta, context, usage, plus
 
@@ -271,7 +270,7 @@ class BackendTests(unittest.TestCase):
             Index(self.home, self.root / 'data')
 
     def test_settings_and_picker_http_and_security(self):
-        with ThreadingHTTPServer(('127.0.0.1', 0), Handler) as server:
+        with LocalHTTPServer(('127.0.0.1', 0), Handler) as server:
             server.index = self.index
             port = server.server_address[1]
             host = f'127.0.0.1:{port}'
