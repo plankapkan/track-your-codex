@@ -3,6 +3,8 @@ import argparse
 import json
 import os
 import threading
+import sys
+import webbrowser
 from datetime import datetime, timedelta
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -32,7 +34,7 @@ class RunLock:
     def close(self):
         self.stream.close()
 
-def build_parser():
+def build_parser(open_browser=False):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--home', type=Path, default=Path.home()/'.codex')
     parser.add_argument('--data', type=Path, default=DEFAULT_DATA)
@@ -41,61 +43,77 @@ def build_parser():
     parser.add_argument('--once', action='store_true')
     parser.add_argument('--from', dest='start')
     parser.add_argument('--to', dest='end')
+    browser = parser.add_mutually_exclusive_group()
+    browser.add_argument('--open-browser', dest='open_browser', action='store_true',
+                         help='Open the dashboard in your default browser')
+    browser.add_argument('--no-browser', dest='open_browser', action='store_false',
+                         help='Do not open a browser')
+    parser.set_defaults(open_browser=open_browser)
     return parser
 
 
-def main():
-    parser = build_parser()
-    args = parser.parse_args()
+def main(argv=None, *, open_browser=False):
+    parser = build_parser(open_browser=open_browser)
+    args = parser.parse_args(argv)
     if args.interval < 5:
         parser.error('--interval must be at least 5 seconds')
     try:
         lock = RunLock(args.data / 'run.lock')
     except OSError:
         parser.error('Monitor already running for this data directory')
-    index = Index(args.home, args.data)
-    stop_file = args.data / 'stop'
-    stop_file.unlink(missing_ok=True)
-    if args.once:
-        try:
+    try:
+        index = Index(args.home, args.data)
+        stop_file = args.data / 'stop'
+        stop_file.unlink(missing_ok=True)
+        if args.once:
             index.scan()
             today = datetime.now(MSK).date()
             result = index.report(args.start or (today-timedelta(days=6)).isoformat(), args.end or today.isoformat())
             (args.data / 'report.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
             (args.data / 'chats.csv').write_text(csv_text(result['chats']), encoding='utf-8')
             print(json.dumps(dict(summary=result['summary'], index=result['index'], diagnostics=result['diagnostics']), ensure_ascii=True))
-        finally:
-            lock.close()
-        return
-    server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
-    server.daemon_threads = True
-    server.index = index
-    server.allowed_hosts = {f'127.0.0.1:{args.port}', f'localhost:{args.port}'}
-    stopping = threading.Event()
-    def poll():
-        while not stopping.is_set() and not stop_file.exists():
+            return
+        try:
+            server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
+        except OSError as exc:
+            parser.error(f'Cannot start local server: {exc}')
+        with server:
+            port = server.server_address[1]
+            url = f'http://127.0.0.1:{port}/'
+            server.daemon_threads = True
+            server.index = index
+            server.allowed_hosts = {f'127.0.0.1:{port}', f'localhost:{port}'}
+            server.timeout = 1
+            stopping = threading.Event()
+            def poll():
+                while not stopping.is_set() and not stop_file.exists():
+                    try:
+                        index.scan()
+                    except Exception:
+                        pass  # Error remains visible in /api/usage.
+                    for _ in range(args.interval):
+                        if stopping.wait(1) or stop_file.exists():
+                            return
+            watcher = threading.Thread(target=poll, daemon=True)
             try:
-                index.scan()
-            except Exception:
-                pass  # Error remains visible in /api/usage.
-            for _ in range(args.interval):
-                if stopping.wait(1) or stop_file.exists():
-                    return
-    watcher = threading.Thread(target=poll, daemon=True)
-    watcher.start()
-    (args.data / 'running.json').write_text(json.dumps(dict(pid=os.getpid(), url=f'http://127.0.0.1:{args.port}/')), encoding='utf-8')
-    print(f'Usage monitor: http://127.0.0.1:{args.port}/', flush=True)
-    server.timeout = 1
-    try:
-        while not stop_file.exists():
-            server.handle_request()
-    except KeyboardInterrupt:
-        pass
+                watcher.start()
+                (args.data / 'running.json').write_text(json.dumps(dict(pid=os.getpid(), url=url)), encoding='utf-8')
+                print(f'Usage monitor: {url}', flush=True)
+                if args.open_browser:
+                    try:
+                        webbrowser.open(url)
+                    except Exception as exc:
+                        print(f'Could not open browser: {exc}. Open {url} manually.', file=sys.stderr)
+                while not stop_file.exists():
+                    server.handle_request()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                stopping.set()
+                if watcher.ident is not None:
+                    watcher.join(timeout=5)
+                (args.data / 'running.json').unlink(missing_ok=True)
     finally:
-        stopping.set()
-        server.server_close()
-        watcher.join(timeout=5)
-        (args.data / 'running.json').unlink(missing_ok=True)
         lock.close()
 
 if __name__ == '__main__':

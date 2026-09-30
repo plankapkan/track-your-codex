@@ -15,9 +15,9 @@ git clone https://github.com/plankapkan/track-your-codex.git
 cd track-your-codex
 ```
 
-**Windows:** double-click `Start-monitor.cmd`. Stop with `Stop-monitor.cmd`. The launcher also works with Codex's bundled Python.
+Run `python start.py` on Windows, or `python3 start.py` on macOS / Linux. The dashboard opens in your browser. Keep the terminal open; stop with Ctrl+C. Use `--no-browser` to open [localhost:8766](http://127.0.0.1:8766/) yourself. A quoted absolute path to `start.py` also works from another folder.
 
-**macOS / Linux:** run `python3 -m token_tracker`, then open [localhost:8766](http://127.0.0.1:8766/). Stop with Ctrl+C. Automated tests run on all three platforms; the browser interface has been checked manually on Windows.
+Automated tests run on all three platforms; the browser interface has been checked manually on Windows.
 
 **Try with example data:** run `python -m token_tracker.demo` (`python3 -m token_tracker.demo` on macOS / Linux). It opens a separate dashboard without reading your Codex logs. Stop with Ctrl+C.
 

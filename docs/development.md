@@ -8,14 +8,15 @@ Use Python 3.10+ from the repository root. The application and tests use only th
 token_tracker/       Python package; python -m token_tracker starts the monitor
   web/               Dashboard HTML, CSS and JavaScript
 tests/               Unit tests and synthetic fixtures
-scripts/             Windows launchers and backend benchmark
+scripts/             Backend benchmark
 docs/                Usage, accounting and development notes
 data/                Local working database and logs (ignored by Git)
-Start-monitor.cmd    Windows start shortcut
-Stop-monitor.cmd     Windows stop shortcut
+start.py             Foreground launcher for all platforms; opens the browser
 ```
 
-Run commands from the repository root so Python can locate the packages. Windows CMD shortcuts locate `scripts/` themselves and work from any current directory, including paths with spaces.
+Run module commands from the repository root so Python can locate the packages. `python start.py` opens the monitor in your browser and stays in the foreground until Ctrl+C; use `--no-browser` to suppress opening. An absolute script path works from any directory without setting `PYTHONPATH`, for example `python "/path with spaces/track-your-codex/start.py"`. Working data still defaults to the repository's `data/` directory.
+
+`python -m token_tracker` keeps the browser closed by default; `--open-browser` opts in. Both entrypoints share the same parser and support `--home`, `--data`, `--port`, `--interval`, `--once`, `--from` and `--to`. Browser opening happens after successful server startup and is skipped for help and one-shot reports. `--port 0` selects a free port; use the printed URL or `data/running.json` to find it.
 
 ## Tests
 
@@ -23,7 +24,7 @@ Run commands from the repository root so Python can locate the packages. Windows
 python -m unittest discover -s tests -t . -p "test_*.py" -v
 ```
 
-Discovery includes every `test_*.py` module, including new regression tests. Fixtures use temporary directories and synthetic session records. HTTP tests use a local server with an automatically assigned port; no browser is required.
+Discovery includes every `test_*.py` module, including new regression tests. Fixtures use temporary directories and synthetic session records. HTTP tests use a local server with an automatically assigned port; browser calls are mocked. Launcher tests run the absolute `start.py` path from a directory with spaces without `PYTHONPATH`, exercise HTTP requests, one-shot reports and stop-marker shutdown, and verify browser policy and Ctrl+C cleanup.
 
 Before changing accounting algorithms, also run the focused baseline required by `AGENTS.md`:
 
