@@ -4,7 +4,9 @@ See which Codex chats, projects and models use the most tokens. Runs on your com
 
 [Русский](README.ru.md) · [Download](https://github.com/plankapkan/track-your-codex/releases/latest) · [Report a problem](https://github.com/plankapkan/track-your-codex/issues)
 
-![Codex token usage dashboard with example data](docs/images/dashboard-en-dark-2026-09-30.jpg)
+![Codex token usage dashboard with pace and time remaining gauges, using example data](docs/images/dashboard-en-dark-2026-10-01.jpg)
+
+[Light theme](docs/images/dashboard-en-light-2026-10-01.jpg)
 
 ## Run
 
@@ -27,11 +29,14 @@ Upgrading from v0.2.0? Follow the [migration steps](docs/troubleshooting.md#upgr
 
 - Tokens by chat, project and model, with input, cache and output counts.
 - Weekly allowance snapshots, token charts and subagent grouping.
+- Stacked remaining / spent allowance bars, a usage speedometer in %/hour and a time remaining gauge from 0 to 7 days. Both gauges use nonlinear scales to make small values easier to read.
 - Filters, chat search and CSV export. English / Russian; light / dark theme.
 
 ## About the numbers
 
 Account percentages come from snapshots in local logs. Shares marked **≈** are estimates weighted by credit rates, not official subscription charges. Cloud chats and other devices may be missing. Times currently use Moscow time (UTC+3).
+
+The pace estimate uses the last three hours of account readings, with more weight on recent data and observed pauses included. Time remaining assumes that pace continues; it is not an official forecast. Stale readings, gaps, resets and insufficient changes suppress the estimate. If the allowance resets before the projected 0%, the gauge says so. The usage dial has a red zone at 40–100 %/hour; the time dial caps its needle at 7 days while keeping the full duration in the number.
 
 The monitor runs on `127.0.0.1`, reads Codex's database without changing it and never reads `auth.json`. It makes no model calls. Its local database stores counters and chat metadata, not message text.
 

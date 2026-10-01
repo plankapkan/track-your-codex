@@ -33,7 +33,9 @@ def build_demo(root, now=None):
         totals = dict(input_tokens=0, cached_input_tokens=0, output_tokens=0,
                       reasoning_output_tokens=0, total_tokens=0)
         for step in range(20):
-            stamp = start + timedelta(hours=step, minutes=number * 7)
+            # Keep a recent, continuous stretch so both gauges work in the demo.
+            stamp = (start + timedelta(hours=step, minutes=number * 7) if step < 14
+                     else now - timedelta(minutes=(19-step)*20+4-number))
             fresh = scale * (1800 + step * 80)
             cached = scale * (8000 + step * 900)
             output = scale * (300 + step * 15)

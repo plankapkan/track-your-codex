@@ -26,6 +26,9 @@ class DemoTests(unittest.TestCase):
                              {'website', 'review', 'tests', 'docs'})
             self.assertNotIn('review', {row['thread'] for row in grouped['chats']})
             self.assertFalse(report['diagnostics'])
+            self.assertEqual(report['quota']['pace']['status'], 'ok')
+            self.assertGreater(report['quota']['pace']['pp_per_hour'], 0)
+            self.assertGreater(report['quota']['pace']['eta_seconds'], 0)
             with index.connect() as con:
                 paths = [row[0] for row in con.execute('SELECT path FROM files')]
             self.assertTrue(all(Path(path).is_relative_to(root) for path in paths))
