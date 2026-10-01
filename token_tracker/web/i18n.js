@@ -3,6 +3,10 @@ let language;
 try { language = localStorage.getItem('codex-usage-language'); } catch {}
 if (!['ru','en'].includes(language)) language = navigator.language?.startsWith('ru') ? 'ru' : 'en';
 const EN = {
+  "Остаток 7-дневного лимита": "7-day allowance remaining",
+  "Лимит и темп расхода": "Allowance and usage pace",
+  "Потрачено за период: {}": "Spent during period: {}",
+  "Потрачено за период: нет снимка": "Spent during period: no reading",
   "Шкала 0–100 %/час, отсечка на 100. Первая половина дуги: 0–1–2–3–4–5; вторая: 10–20–30–40–50–100. Число показывает фактическую оценку, даже выше отсечки.": "Scale: 0–100 %/h, capped at 100. First half of the arc: 0–1–2–3–4–5; second half: 10–20–30–40–50–100. The number shows the estimated rate, even above the cap.",
   "Шкала запаса времени: 0–7 дней до 0% при текущем темпе. Первая половина дуги: 0–0,1–0,3–0,6–1; вторая: 2–3–4–5–6–7. Прогноз больше недели: стрелка на 7, число показывает полное время. Без прогноза стрелка скрыта.": "Time remaining scale: 0–7 days to 0% at the current pace. First half of the arc: 0–0.1–0.3–0.6–1; second half: 2–3–4–5–6–7. Forecasts above a week: needle stops at 7, number shows the full duration. No forecast: needle is hidden.",
   "Запас времени · дни": "Time remaining · days",

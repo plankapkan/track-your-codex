@@ -77,6 +77,10 @@
 .speed-dial-cutoff{fill:none;stroke:var(--danger);stroke-width:9;stroke-linecap:round}
 .quota-instrument .quota-range-readout{width:100%}.quota-instrument .quota-range-readout>strong{white-space:normal}.quota-instrument .quota-range-readout>.quota-range-note{font-size:12px;line-height:1.5;color:var(--muted)}
 
+:root .quota-cards{grid-template-columns:1fr}.quota-speedometer .quota-speed-body{grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.quota-speed-body .quota-instrument{width:100%;max-width:320px;justify-self:center}.quota-instrument .quota-period-note{font-size:11px;color:var(--muted)}@media(max-width:500px){.quota-speedometer .quota-speed-body{grid-template-columns:1fr;gap:22px}}
+
+.quota-balance-instrument .quota-speed-readout>span{font-size:12px;line-height:1.5;color:var(--muted)}.quota-balance-instrument .quota-speed-readout>.quota-period-note{font-size:11px}
+
 /* Compact dashboard header and filters. */
 main{padding:22px 28px}header{gap:16px}header h1{font-size:26px;margin:4px 0}header p{font-size:12px;margin:4px 0 0}.header-actions{gap:12px;flex-wrap:wrap}.header-actions label{gap:4px}.header-actions select{height:38px}
 #filters{padding:12px 14px;gap:10px 12px;margin:12px 0}#filters>label{gap:4px}#filters input[type=date],#filters select,#filters button{padding:7px 10px}.filter-checks{display:flex;flex-wrap:wrap;flex-basis:100%;gap:8px 24px}.filter-checks .check{flex-basis:auto;gap:6px}.filter-checks .cycle{padding:0}

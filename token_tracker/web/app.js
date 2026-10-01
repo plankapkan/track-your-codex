@@ -298,7 +298,8 @@ function paceDuration(seconds) {
   const days=Math.floor(hours/24);
   return t`${number(days)} д ${number(hours%24)} ч`;
 }
-function quotaDial(value, maximum, fuel=false) {
+function quotaDial(value, maximum, mode='speed') {
+  const fuel=mode!=='speed', remaining=mode==='remaining';
   const known=Number.isFinite(value);
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('viewBox','0 0 220 120');svg.setAttribute('aria-hidden','true');
@@ -309,9 +310,9 @@ function quotaDial(value, maximum, fuel=false) {
     svg.append(node);return node;
   };
   const point=(ratio,radius)=>{const angle=Math.PI*(1-ratio);return [110+Math.cos(angle)*radius,110-Math.sin(angle)*radius];};
-  const ticks=fuel?[0,.1,.3,.6,1,2,3,4,5,6,7]:[0,1,2,3,4,5,10,20,30,40,50,100];
+  const ticks=remaining?[0,25,50,75,100]:fuel?[0,.1,.3,.6,1,2,3,4,5,6,7]:[0,1,2,3,4,5,10,20,30,40,50,100];
   const halfway=fuel?4:5;
-  const tickPosition=index=>index<=halfway?index/halfway*.5:.5+(index-halfway)/(ticks.length-1-halfway)*.5;
+  const tickPosition=index=>remaining?index/(ticks.length-1):index<=halfway?index/halfway*.5:.5+(index-halfway)/(ticks.length-1-halfway)*.5;
   const position=amount=>{
     if(amount<=0)return 0;
     if(amount>=maximum)return 1;
@@ -325,7 +326,7 @@ function quotaDial(value, maximum, fuel=false) {
     shape('path',{d:`M 22 110 A 88 88 0 0 1 ${x} ${y}`,class:'speed-dial-fill'});
   }
   if(fuel){
-    const [x,y]=point(position(.3),88);
+    const [x,y]=point(position(remaining?15:.3),88);
     shape('path',{d:`M 22 110 A 88 88 0 0 1 ${x} ${y}`,class:'fuel-dial-reserve'});
   }else{
     const [x,y]=point(position(40),88);
@@ -335,7 +336,7 @@ function quotaDial(value, maximum, fuel=false) {
     const ratio=position(amount),[x1,y1]=point(ratio,76),[x2,y2]=point(ratio,83),[x,y]=point(ratio,102);
     shape('line',{x1,y1,x2,y2,class:'speed-dial-tick'});
     const label=shape('text',{x,y:y+4,'text-anchor':'middle',class:'speed-dial-label'});
-    label.textContent=number(amount);
+    label.textContent=remaining?percent(amount):number(amount);
   }
   if(known){
     const [x,y]=point(position(value),65);
@@ -346,9 +347,10 @@ function quotaDial(value, maximum, fuel=false) {
   }
   return svg;
 }
-function renderPace(pace) {
+function renderPace(quota) {
+  const pace=quota.pace;
   const row=document.createElement('article');row.className='quota-meter quota-speedometer';
-  const heading=document.createElement('div');heading.className='quota-speed-heading';heading.textContent=t('Темп и запас лимита');
+  const heading=document.createElement('div');heading.className='quota-speed-heading';heading.textContent=t('Лимит и темп расхода');
   const body=document.createElement('div');body.className='quota-speed-body';
   const readout=document.createElement('div');readout.className='quota-speed-readout';
   const speed=document.createElement('strong'), forecast=document.createElement('strong');
@@ -389,40 +391,22 @@ function renderPace(pace) {
   const fuelReadout=document.createElement('div');fuelReadout.className='quota-speed-readout quota-range-readout';
   fuelReadout.append(forecast,forecastNote);
   fuelInstrument.title=t('Шкала запаса времени: 0–7 дней до 0% при текущем темпе. Первая половина дуги: 0–0,1–0,3–0,6–1; вторая: 2–3–4–5–6–7. Прогноз больше недели: стрелка на 7, число показывает полное время. Без прогноза стрелка скрыта.');
-  fuelInstrument.append(fuelCaption,quotaDial(reserveDays,7,true),fuelReadout);
-  body.append(speedInstrument,fuelInstrument);row.append(heading,body);return row;
+  fuelInstrument.append(fuelCaption,quotaDial(reserveDays,7,'time'),fuelReadout);
+  const balanceInstrument=document.createElement('div');balanceInstrument.className='quota-instrument quota-balance-instrument';
+  const balanceCaption=document.createElement('span');balanceCaption.className='quota-instrument-caption';balanceCaption.textContent=t('Остаток 7-дневного лимита');
+  const used=quota.latest?.used_percent;
+  const remaining=Number.isFinite(used)?Math.max(0,Math.min(100,100-used)):null;
+  const balanceReadout=document.createElement('div');balanceReadout.className='quota-speed-readout';
+  const balanceValue=document.createElement('strong');balanceValue.textContent=remaining==null?'—':percent(remaining);
+  const period=document.createElement('span');period.className='quota-period-note';period.textContent=quota.latest?t`Потрачено за период: ${percent(quota.period.observed_growth_pp)}`:t('Потрачено за период: нет снимка');
+  period.title=t('С учётом сбросов · 100% = один недельный лимит');
+  balanceReadout.append(balanceValue,period);
+  balanceInstrument.append(balanceCaption,quotaDial(remaining,100,'remaining'),balanceReadout);
+  body.append(balanceInstrument,speedInstrument,fuelInstrument);row.append(heading,body);return row;
 }
 function renderQuota(data) {
   const quota=data.quota;$('quota-cards').replaceChildren();
-  const currentUsed=quota.latest?.used_percent;
-  const remainingText=amount=>percent(Math.max(0,100-amount));
-  const cards=[
-    {kind:'account',label:t('Остаток · аккаунт'),amount:currentUsed,text:currentUsed==null?t('Нет снимка'):remainingText(currentUsed),detail:currentUsed==null?t('Нет снимка оставшегося лимита'):t('По показаниям OpenAI')},
-    {kind:'period',label:t('Потрачено за период'),amount:quota.latest?quota.period.observed_growth_pp:null,text:quota.latest?percent(quota.period.observed_growth_pp):t('Нет снимка'),detail:t('С учётом сбросов · 100% = один недельный лимит')},
-  ];
-  const balances=document.createElement('article');balances.className='quota-meter quota-balances';
-  for(const [index,item] of cards.entries()){
-    const card=document.createElement('div');card.className='quota-band quota-meter-'+item.kind;
-    const heading=document.createElement('div');heading.className='quota-meter-heading';
-    const caption=document.createElement('span');caption.id='quota-caption-'+index;caption.textContent=item.label;
-    const value=document.createElement('strong');value.textContent=item.text;heading.append(caption,value);
-    const known=item.amount!=null&&Number.isFinite(item.amount);
-    const spent=item.kind==='period';
-    const maximum=spent&&known?Math.max(100,Math.ceil(item.amount/100)*100):100;
-    const track=document.createElement('div');track.className='quota-meter-track';track.setAttribute('role','progressbar');track.setAttribute('aria-labelledby',caption.id);track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax',String(maximum));
-    track.setAttribute('aria-valuetext',item.text);
-    if(known){
-      const progress=spent?Math.max(0,item.amount):Math.max(0,Math.min(100,100-item.amount));
-      const fill=document.createElement('div');fill.className='quota-meter-fill';fill.style.width=(progress/maximum*100)+'%';track.append(fill);
-      track.setAttribute('aria-valuenow',String(progress));
-    }else{card.classList.add('quota-meter-unknown');}
-    const footer=document.createElement('div');footer.className='quota-meter-footer';
-    const detail=document.createElement('span');detail.textContent=!spent&&known&&item.amount>100?t('Расход превысил недельный лимит'):item.detail;
-    const scale=document.createElement('span');scale.textContent='0–'+maximum+'%';scale.setAttribute('aria-hidden','true');footer.append(detail,scale);
-    card.append(heading,track);
-    card.append(footer);balances.append(card);
-  }
-  $('quota-cards').append(balances,renderPace(quota.pace));
+  $('quota-cards').append(renderPace(quota));
   const coverage=data.summary.total?data.summary.quota_covered_tokens/data.summary.total*100:0;
   const latestTime=quota.latest?dateTime(new Date(quota.latest.timestamp*1000)):t('нет снимка');
   const resetTime=quota.latest?dateTime(new Date(quota.latest.reset_at*1000)):t('неизвестен');
