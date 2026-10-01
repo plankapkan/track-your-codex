@@ -4,7 +4,7 @@ See which Codex chats, projects and models use the most tokens. Runs on your com
 
 [Русский](README.ru.md) · [Download](https://github.com/plankapkan/track-your-codex/releases/latest) · [Report a problem](https://github.com/plankapkan/track-your-codex/issues)
 
-![Codex token usage dashboard with pace and time remaining gauges, using example data](docs/images/dashboard-en-dark-2026-10-01.jpg)
+![Codex token usage dashboard with three gauges: remaining allowance, usage pace and time remaining, using example data](docs/images/dashboard-en-dark-2026-10-01.jpg)
 
 [Light theme](docs/images/dashboard-en-light-2026-10-01.jpg)
 
@@ -29,7 +29,7 @@ Upgrading from v0.2.0? Follow the [migration steps](docs/troubleshooting.md#upgr
 
 - Tokens by chat, project and model, with input, cache and output counts.
 - Weekly allowance snapshots, token charts and subagent grouping.
-- Stacked remaining / spent allowance bars, a usage speedometer in %/hour and a time remaining gauge from 0 to 7 days. Both gauges use nonlinear scales to make small values easier to read.
+- Three gauges in one panel: remaining weekly allowance (0–100%), usage pace (%/hour) and time remaining (0–7 days). The pace and time gauges use nonlinear scales to make small values easier to read; allowance spent during the selected period appears below the remaining allowance.
 - Filters, chat search and CSV export. English / Russian; light / dark theme.
 
 ## About the numbers
