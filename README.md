@@ -29,7 +29,7 @@ Upgrading from v0.2.0? Follow the [migration steps](docs/troubleshooting.md#upgr
 
 - Tokens by chat, project and model, with input, cache and output counts.
 - Weekly allowance snapshots, token charts and subagent grouping.
-- Three gauges in one panel: remaining weekly allowance (0–100%), usage pace (%/hour) and time remaining (0–7 days). The pace and time gauges use nonlinear scales to make small values easier to read; units sit inside the dials, with compact numeric readouts below and details available on hover.
+- Three gauges in one panel: remaining weekly allowance (0–100%), usage pace (%/hour) and time remaining (0–7 days). The pace and time gauges use nonlinear scales to make small values easier to read; units sit inside the dials, with compact numeric readouts below and details available on hover. Dashboard sections and adjacent cards use consistent 16 px spacing.
 - Filters, chat search and CSV export. English / Russian; light / dark theme.
 
 ## About the numbers

@@ -145,3 +145,11 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 @media(max-width:1100px){.usage-rankings{grid-template-columns:1fr}}@media(max-width:500px){.ranking-panel{padding:12px}.ranking-columns,.ranking-row{grid-template-columns:minmax(0,1fr) 95px 90px;gap:5px}.ranking-row{font-size:11px;padding:10px 8px}.ranking-position{width:12px}.ranking-name{gap:5px}}
 @media(prefers-reduced-motion:reduce){.ranking-item[open]>.ranking-report{animation:none}.ranking-row::after{transition:none}}
 .speed-dial-unit{fill:var(--text);font:600 13px system-ui;paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
+
+/* Keep panel spacing consistent when explanatory paragraphs are hidden. */
+:root{--dashboard-gap:16px}
+:root main>.filter-toolbar{margin:var(--dashboard-gap) 0 0;gap:var(--dashboard-gap)}
+:root main>section,:root main>.quota-cards{margin:var(--dashboard-gap) 0 0}
+:root main>.cards,:root main>.charts,:root main>.usage-rankings{gap:var(--dashboard-gap)}
+main>section>.section-heading{margin:0 0 12px}
+main>footer{margin-top:var(--dashboard-gap)}
