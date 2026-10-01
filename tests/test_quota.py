@@ -90,50 +90,109 @@ class PaceTests(unittest.TestCase):
             self.assertAlmostEqual(pace['pp_per_hour'],6)
             self.assertAlmostEqual(pace['eta_seconds'],84/6*3600)
 
-    def test_recent_work_has_more_weight_and_plateau_slows_speed(self):
+    def test_time_average_includes_bursts_and_pauses(self):
         steady=[sample(t,10+t/600) for t in range(0,3601,600)]
         faster=[sample(t,10+t/600+max(0,t-1800)/600) for t in range(0,3601,600)]
         self.assertGreater(self.pace(faster)['pp_per_hour'],self.pace(steady)['pp_per_hour'])
         paused=steady+[sample(4200,16),sample(4800,16)]
         self.assertLess(self.pace(paused)['pp_per_hour'],6)
         paused += [sample(t,16) for t in (5400,6000,6600)]
-        self.assertEqual(self.pace(paused)['status'],'quiet')
-        self.assertIsNone(self.pace(paused)['eta_seconds'])
+        self.assertEqual(self.pace(paused)['status'],'ok')
+        self.assertAlmostEqual(self.pace(paused)['pp_per_hour'],6/6600*3600)
 
     def test_rounding_short_history_and_stale_are_not_zero(self):
         cases=[([sample(0,10)],0,'insufficient'),
                ([sample(0,10),sample(60,15)],60,'insufficient'),
                ([sample(0,10),sample(900,11)],900,'below_resolution'),
                ([sample(0,10),sample(900,10)],900,'below_resolution'),
-               ([sample(0,10),sample(900,15)],1801,'stale')]
+               ([sample(0,10),sample(900,15)],1801,'ok')]
         for rows,now,status in cases:
             with self.subTest(status=status):
                 pace=self.pace(rows,now)
                 self.assertEqual(pace['status'],status)
-                self.assertIsNone(pace['pp_per_hour'])
+                if status=='ok':
+                    self.assertAlmostEqual(pace['pp_per_hour'],20)
+                    self.assertEqual(pace['forecast_status'],'stale')
+                else:
+                    self.assertIsNone(pace['pp_per_hour'])
                 self.assertIsNone(pace['eta_seconds'])
 
-    def test_gaps_resets_and_persistent_decreases_restart_history(self):
+    def test_gaps_resets_and_decreases_preserve_earlier_valid_history(self):
         old=[sample(0,10),sample(900,15),sample(1800,20)]
         for tail in ([sample(4000,40)], [sample(1900,1)],
                      [sample(1900,1,RESET+3600)]):
             pace=self.pace(old+tail)
-            self.assertEqual(pace['status'],'insufficient')
+            self.assertEqual(pace['status'],'ok')
+            self.assertAlmostEqual(pace['pp_per_hour'],20)
         recovered=old+[sample(1810,19),sample(1820,20),sample(2400,22)]
         self.assertEqual(self.pace(recovered)['status'],'ok')
 
     def test_reset_eta_and_exhausted(self):
         rows=[sample(0,10,3600),sample(900,15,3600)]
         self.assertTrue(self.pace(rows)['reset_before_exhaustion'])
-        self.assertEqual(self.pace(rows,3600)['status'],'reset_due')
+        self.assertEqual(self.pace(rows,3600)['forecast_status'],'reset_due')
         pace=self.pace([sample(0,95),sample(900,100)])
-        self.assertEqual(pace['status'],'exhausted')
+        self.assertEqual(pace['forecast_status'],'exhausted')
         self.assertEqual(pace['eta_seconds'],0)
 
     def test_lookback_excludes_old_work(self):
         rows=[sample(t,10+min(t,1800)/600) for t in range(0,14401,600)]
         self.assertEqual(self.pace(rows)['status'],'below_resolution')
         self.assertEqual(self.pace(rows)['span_seconds'],10800)
+
+    def test_selected_range_changes_average_and_clips_boundaries(self):
+        rows=[sample(t,10+t/1800+max(0,t-14400)/300) for t in range(0,18001,600)]
+        quota=build_quota(rows,[],RATES)
+        hour=consumption_pace(quota,18000,14400,18000)
+        five=consumption_pace(quota,18000,0,18000)
+        self.assertAlmostEqual(hour['pp_per_hour'],14)
+        self.assertAlmostEqual(five['pp_per_hour'],4.4)
+        clipped=consumption_pace(quota,18000,14550,17850)
+        self.assertAlmostEqual(clipped['pp_per_hour'],14)
+        self.assertEqual(clipped['span_seconds'],3300)
+        self.assertEqual(clipped['coverage_percent'],100)
+
+    def test_peak_timing_and_snapshot_density_do_not_change_average(self):
+        for peak in (600,1800,3000):
+            for step in (60,600):
+                rows=[sample(t,10+(6 if t>=peak else 0)) for t in range(0,3601,step)]
+                pace=consumption_pace(build_quota(rows,[],RATES),3600,0,3600)
+                self.assertEqual(pace['status'],'ok')
+                self.assertAlmostEqual(pace['pp_per_hour'],6)
+
+    def test_gaps_and_resets_exclude_unknown_time_but_keep_valid_segments(self):
+        rows=[sample(0,10),sample(900,13),sample(4500,30),sample(5400,33),
+              sample(5500,0,RESET+604800),sample(6400,3,RESET+604800)]
+        pace=consumption_pace(build_quota(rows,[],RATES),6400,0,6400)
+        self.assertAlmostEqual(pace['pp_per_hour'],12)
+        self.assertEqual(pace['growth_pp'],9)
+        self.assertEqual(pace['span_seconds'],2700)
+        self.assertAlmostEqual(pace['coverage_percent'],2700/6400*100)
+
+    def test_historical_average_and_missing_coverage(self):
+        quota=build_quota([sample(0,10),sample(900,13),sample(1800,16)],[],RATES)
+        pace=consumption_pace(quota,10000,0,900)
+        self.assertAlmostEqual(pace['pp_per_hour'],12)
+        self.assertEqual(pace['forecast_status'],'stale')
+        self.assertIsNone(pace['eta_seconds'])
+        missing=consumption_pace(quota,10000,5000,10000)
+        self.assertEqual(missing['status'],'insufficient')
+        self.assertIsNone(missing['pp_per_hour'])
+        self.assertEqual(missing['coverage_percent'],0)
+
+    def test_conflicting_readings_are_not_integrated(self):
+        quota=dict(latest=sample(2700,19),curve=[sample(0,10),sample(900,13),
+                   sample(900,15),sample(1800,16),sample(2700,19)])
+        pace=consumption_pace(quota,2700,0,2700)
+        self.assertEqual(pace['span_seconds'],900)
+        self.assertAlmostEqual(pace['pp_per_hour'],12)
+
+    def test_persistent_dip_recovery_is_not_new_consumption(self):
+        quota=build_quota([sample(0,10),sample(900,15),sample(1800,20),
+                          sample(2000,18),sample(2600,19),sample(3200,21)],[],RATES)
+        pace=consumption_pace(quota,3200,0,3200)
+        self.assertEqual(pace['growth_pp'],11)
+        self.assertEqual(pace['span_seconds'],3000)
 
 class IntegrationQuotaTests(unittest.TestCase):
     setUp=fixtures.MonitorTests.setUp
@@ -154,6 +213,8 @@ class IntegrationQuotaTests(unittest.TestCase):
         self.index.scan()
         result=self.report()
         filtered=self.report(model='gpt-6-astra')
+        self.assertEqual(result['quota']['pace']['range_seconds'],
+                         result['range']['final_time']-result['range']['first_time'])
         for key in ('status','pp_per_hour','eta_seconds','span_seconds','growth_pp'):
             self.assertEqual(result['quota']['pace'][key],filtered['quota']['pace'][key])
         self.assertEqual(result['quota']['latest']['used_percent'],4)

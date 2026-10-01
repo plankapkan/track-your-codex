@@ -345,10 +345,13 @@ function quotaDial(value, maximum, mode='speed') {
   }else{
     const missing=shape('text',{x:110,y:90,'text-anchor':'middle',class:'speed-dial-missing'});missing.textContent='—';
   }
+  const unit=shape('text',{x:110,y:60,'text-anchor':'middle',class:'speed-dial-unit'});
+  unit.textContent=remaining?'%':fuel?t('дни'):t('%/час');
   return svg;
 }
 function renderPace(quota) {
   const pace=quota.pace;
+  const forecastStatus=pace?.status==='ok'?pace.forecast_status:pace?.status;
   const row=document.createElement('article');row.className='quota-meter quota-speedometer';
   const heading=document.createElement('div');heading.className='quota-speed-heading';heading.textContent=t('Лимит и темп расхода');
   const body=document.createElement('div');body.className='quota-speed-body';
@@ -356,41 +359,47 @@ function renderPace(quota) {
   const speed=document.createElement('strong'), forecast=document.createElement('strong');
   const forecastNote=document.createElement('span');forecastNote.className='quota-range-note';
   speed.textContent='—';
-  const unit=document.createElement('span');unit.className='quota-speed-unit';unit.textContent=t('%/час');
   const messages={
-    insufficient:'До 0%: нужно больше снимков',
-    below_resolution:'До 0%: расход ниже точности счётчика',
-    quiet:'До 0%: пауза в расходе',
-    stale:'До 0%: снимок устарел',
-    reset_due:'До 0%: ожидается снимок после сброса',
-    inconsistent:'До 0%: противоречивые снимки',
+    insufficient:'Мало данных',
+    below_resolution:'Ниже точности счётчика',
+    quiet:'Пауза',
+    stale:'Снимок устарел',
+    reset_due:'Нет свежего снимка',
+    inconsistent:'Противоречивые снимки',
     exhausted:'Лимит исчерпан',
   };
   forecast.textContent='—';
-  forecastNote.textContent=t(messages[pace?.status]||messages.insufficient);
+  forecastNote.textContent=t(messages[forecastStatus]||messages.insufficient);
   if(pace?.status==='ok'){
     const value=new Intl.NumberFormat(locale(),{maximumFractionDigits:2}).format(pace.pp_per_hour);
     speed.textContent='≈ '+value;
-    forecast.textContent='≈ '+paceDuration(pace.eta_seconds);
-    forecastNote.textContent=t('до 0% при текущем темпе');
-    if(pace.reset_before_exhaustion)forecastNote.textContent+=' · '+t('сброс раньше');
-  }else if(pace?.status==='exhausted'){
+    if(forecastStatus==='ok'){
+      forecast.textContent='≈ '+paceDuration(pace.eta_seconds);
+      forecastNote.textContent=t('до 0%');
+      if(pace.reset_before_exhaustion)forecastNote.textContent+=' · '+t('сброс раньше');
+    }
+  }
+  if(forecastStatus==='exhausted'){
     forecast.textContent=t('0 мин');
   }
-  row.title=t('Оценка при сохранении темпа. Последние 3 часа, вес свежих данных выше; паузы учтены. Минимум 15 минут и 2 п.п. расхода. Пробелы более 30 минут не соединяются; снимки старше 15 минут не дают прогноза. %/час — процентные пункты лимита в час.');
+  row.title=t('Средний расход за выбранный период: прирост счётчика / время наблюдений. Паузы учтены; короткие пики сглаживаются усреднением. Минимум 15 минут и 2 п.п. расхода. Пробелы более 30 минут, сбросы и понижения не соединяются. Прогноз требует свежего снимка. %/час — процентные пункты лимита в час.');
   const known=pace?.status==='ok'&&Number.isFinite(pace.pp_per_hour);
   const rate=known?pace.pp_per_hour:null;
   const maximum=100;
   const speedInstrument=document.createElement('div');speedInstrument.className='quota-instrument';
-  const speedCaption=document.createElement('span');speedCaption.className='quota-instrument-caption';speedCaption.textContent=t('Расход');
+  const speedCaption=document.createElement('span');speedCaption.className='quota-instrument-caption';speedCaption.textContent=t('Средний расход за период');
   speedInstrument.title=t('Шкала 0–100 %/час, отсечка на 100. Первая половина дуги: 0–1–2–3–4–5; вторая: 10–20–30–40–50–100. Число показывает фактическую оценку, даже выше отсечки.');
-  readout.append(speed,unit);speedInstrument.append(speedCaption,quotaDial(rate,maximum),readout);
+  const coverageNote=pace?.span_seconds>0?t`Наблюдения: ${paceDuration(pace.span_seconds)} · ${percent(pace.coverage_percent)} периода`:t('Нет интервалов наблюдений');
+  speedInstrument.title+='\n'+row.title+'\n'+coverageNote;
+  readout.append(speed);
+  speedInstrument.append(speedCaption,quotaDial(rate,maximum),readout);
   const fuelInstrument=document.createElement('div');fuelInstrument.className='quota-instrument quota-fuel-instrument';
-  const fuelCaption=document.createElement('span');fuelCaption.className='quota-instrument-caption';fuelCaption.textContent=t('Запас времени · дни');
-  const reserveDays=(pace?.status==='ok'||pace?.status==='exhausted')&&Number.isFinite(pace.eta_seconds)&&pace.eta_seconds>=0?pace.eta_seconds/86400:null;
+  const fuelCaption=document.createElement('span');fuelCaption.className='quota-instrument-caption';fuelCaption.textContent=t('Запас времени');
+  const reserveDays=(forecastStatus==='ok'||forecastStatus==='exhausted')&&Number.isFinite(pace.eta_seconds)&&pace.eta_seconds>=0?pace.eta_seconds/86400:null;
   const fuelReadout=document.createElement('div');fuelReadout.className='quota-speed-readout quota-range-readout';
-  fuelReadout.append(forecast,forecastNote);
+  fuelReadout.append(forecast);
   fuelInstrument.title=t('Шкала запаса времени: 0–7 дней до 0% при текущем темпе. Первая половина дуги: 0–0,1–0,3–0,6–1; вторая: 2–3–4–5–6–7. Прогноз больше недели: стрелка на 7, число показывает полное время. Без прогноза стрелка скрыта.');
+  fuelInstrument.title+='\n'+forecastNote.textContent;
   fuelInstrument.append(fuelCaption,quotaDial(reserveDays,7,'time'),fuelReadout);
   const balanceInstrument=document.createElement('div');balanceInstrument.className='quota-instrument quota-balance-instrument';
   const balanceCaption=document.createElement('span');balanceCaption.className='quota-instrument-caption';balanceCaption.textContent=t('Остаток 7-дневного лимита');
@@ -398,9 +407,8 @@ function renderPace(quota) {
   const remaining=Number.isFinite(used)?Math.max(0,Math.min(100,100-used)):null;
   const balanceReadout=document.createElement('div');balanceReadout.className='quota-speed-readout';
   const balanceValue=document.createElement('strong');balanceValue.textContent=remaining==null?'—':percent(remaining);
-  const period=document.createElement('span');period.className='quota-period-note';period.textContent=quota.latest?t`Потрачено за период: ${percent(quota.period.observed_growth_pp)}`:t('Потрачено за период: нет снимка');
-  period.title=t('С учётом сбросов · 100% = один недельный лимит');
-  balanceReadout.append(balanceValue,period);
+  balanceInstrument.title=quota.latest?t`За период: ${percent(quota.period.observed_growth_pp)}`:t('Нет снимка');
+  balanceReadout.append(balanceValue);
   balanceInstrument.append(balanceCaption,quotaDial(remaining,100,'remaining'),balanceReadout);
   body.append(balanceInstrument,speedInstrument,fuelInstrument);row.append(heading,body);return row;
 }

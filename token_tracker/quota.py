@@ -1,88 +1,95 @@
 """Conditional attribution of observed account quota changes, never per-request billing."""
 from collections import defaultdict
-import math
 
 WEEK = 10080 * 60
 RESET_TOLERANCE = 60  # The service can return reset timestamps differing by a few seconds.
 BLOCK_PP = 5
 
-def consumption_pace(quota, now):
-    """Estimate account percentage points/hour from recent observations only.
+def consumption_pace(quota, now, first=None, final=None):
+    """Time-average observed account growth within the selected range.
 
-    Integrate interval slopes with a 45-minute exponential half-life over three
-    hours. Time weighting makes duplicated / frequent snapshots harmless and
-    includes observed pauses. Never bridge a reset, a decrease or a >30m gap.
-    Rounded plateaus are unknown consumption, not proof of a zero rate.
+    Clip valid intervals to range boundaries. Pauses contribute time; missing
+    history, resets and decreases do not. Do not trim real bursts: averaging
+    their growth over observed time smooths peaks without losing consumption.
     """
+    final = min(now, now if final is None else final)
+    first = final-10800 if first is None else first
     result = dict(status='insufficient', pp_per_hour=None, eta_seconds=None,
                   reset_before_exhaustion=None, span_seconds=0, growth_pp=0,
-                  sample_age_seconds=None)
+                  sample_age_seconds=None, range_seconds=max(0, final-first),
+                  coverage_percent=0, forecast_status='insufficient')
     latest = quota.get('latest')
     if latest is None:
         return result
     age = max(0, now-latest['timestamp'])
     result['sample_age_seconds'] = age
-    if now >= latest['reset_at']:
-        result['status'] = 'reset_due'
-        return result
-    if age > 900:
-        result['status'] = 'stale'
-        return result
-    if latest['used_percent'] >= 100:
-        result.update(status='exhausted', eta_seconds=0)
+    if final <= first:
         return result
     # build_quota already canonicalizes reset timestamp jitter and limit IDs.
     points = [p for p in quota['curve']
-              if abs(p['reset_at']-latest['reset_at']) <= RESET_TOLERANCE
-              and latest['timestamp']-10800-1800 <= p['timestamp'] <= latest['timestamp']]
+              if first-1800 <= p['timestamp'] <= min(now, final+1800)]
     rows = []
     for index, point in enumerate(points):
-        if rows and 0 < rows[-1]['used_percent']-point['used_percent'] <= 1:
-            if any(future['used_percent'] >= rows[-1]['used_percent']
+        if rows and rows[-1] is not None and 0 < rows[-1]['used_percent']-point['used_percent'] <= 1:
+            if point['reset_at'] == rows[-1]['reset_at'] and any(
+                   future['reset_at'] == point['reset_at']
+                   and future['used_percent'] >= rows[-1]['used_percent']
                    for future in points[index+1:]
                    if future['timestamp']-point['timestamp'] <= 120):
                 continue  # Same short recovered lag heuristic as attribution.
-        if rows and point['timestamp'] == rows[-1]['timestamp']:
+        if rows and rows[-1] is not None and point['timestamp'] == rows[-1]['timestamp']:
             if point['used_percent'] != rows[-1]['used_percent']:
-                rows = []  # Conflicting simultaneous account readings.
-        elif rows and (point['timestamp']-rows[-1]['timestamp'] > 1800
-                       or point['used_percent'] < rows[-1]['used_percent']):
-            rows = []
+                rows[-1] = None  # Exclude both intervals at conflicting readings.
+            continue
         rows.append(point)
-    if not rows or rows[-1]['used_percent'] != latest['used_percent']:
-        result['status'] = 'inconsistent'
-        return result
-    end = latest['timestamp']
-    cutoff = end-10800
-    decay = math.log(2)/2700
-    weighted_growth = weighted_time = growth = span = 0.
+    growth = span = 0.
+    high = None
+    reset_at = None
     for left, right in zip(rows, rows[1:]):
-        start = max(cutoff, left['timestamp'])
-        stop = right['timestamp']
+        if left is None or right is None:
+            continue
+        duration = right['timestamp']-left['timestamp']
+        delta = right['used_percent']-left['used_percent']
+        if reset_at != left['reset_at']:
+            high = left['used_percent']
+            reset_at = left['reset_at']
+        high = max(high, left['used_percent'])
+        # Recovery from a persistent dip is not new spending. Use only growth
+        # above the cycle's previously observed high-water mark.
+        delta = min(delta, max(0, right['used_percent']-high))
+        if right['reset_at'] == reset_at:
+            high = max(high, right['used_percent'])
+        if (not 0 < duration <= 1800 or delta < 0
+                or left['reset_at'] != right['reset_at']):
+            continue
+        start = max(first, left['timestamp'])
+        stop = min(final, right['timestamp'])
         if stop <= start:
             continue
-        duration = stop-left['timestamp']
-        delta = right['used_percent']-left['used_percent']
-        weight = (math.exp(-decay*(end-stop))-math.exp(-decay*(end-start)))/decay
-        weighted_growth += delta/duration*weight
-        weighted_time += weight
         growth += delta*(stop-start)/duration
         span += stop-start
-    result.update(span_seconds=span, growth_pp=growth)
+    result.update(span_seconds=span, growth_pp=growth,
+                  coverage_percent=span/(final-first)*100)
     if span < 900:
         return result
     if growth < 2:
         result['status'] = 'below_resolution'
         return result
-    # Stop extrapolating old work when fresh readings have been flat for 45m.
-    last_change = next((r['timestamp'] for l, r in reversed(list(zip(rows, rows[1:])))
-                        if r['used_percent'] > l['used_percent']), None)
-    if last_change is None or end-last_change >= 2700:
-        result['status'] = 'quiet'
+    speed = growth/span*3600
+    result.update(status='ok', pp_per_hour=speed)
+    # Historical averages remain useful when the latest account reading is
+    # stale. Only a forecast needs a fresh balance in the current cycle.
+    if now >= latest['reset_at']:
+        result['forecast_status'] = 'reset_due'
         return result
-    speed = weighted_growth/weighted_time*3600
+    if age > 900:
+        result['forecast_status'] = 'stale'
+        return result
+    if latest['used_percent'] >= 100:
+        result.update(forecast_status='exhausted', eta_seconds=0)
+        return result
     eta = (100-latest['used_percent'])/speed*3600
-    result.update(status='ok', pp_per_hour=speed, eta_seconds=eta,
+    result.update(forecast_status='ok', eta_seconds=eta,
                   reset_before_exhaustion=now+eta >= latest['reset_at'])
     return result
 
