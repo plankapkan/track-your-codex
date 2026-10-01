@@ -10,6 +10,7 @@ class Reports:
     @synchronized
     def curve(self, first, final):
         """Build both chart series under one lock; socket writes happen later."""
+        self.ensure_history(first)
         self.prepare_quota()
         raw = [p for p in (self.quota_cache or {}).get('curve', []) if first <= p['timestamp'] <= final]
         curve = []
@@ -27,10 +28,12 @@ class Reports:
     @synchronized
     def token_curve(self, first, final):
         """Cumulative local token totals, deduplicated before selecting the interval."""
+        self.ensure_history(first)
         with self.connect() as con:
-            rows = con.execute('''WITH unique_events AS (SELECT * FROM events GROUP BY event_key)
+            rows = con.execute('''WITH unique_events AS (SELECT * FROM events
+                WHERE timestamp>=? AND timestamp<=? GROUP BY event_key)
                 SELECT timestamp,model,total FROM unique_events
-                WHERE timestamp>=? AND timestamp<=? ORDER BY timestamp''', (first, final)).fetchall()
+                ORDER BY timestamp''', (first, final)).fetchall()
         if not rows:
             return dict(points=[], models=[])
         models = sorted({row['model'] for row in rows})
@@ -53,7 +56,6 @@ class Reports:
 
     @synchronized
     def report(self, start, end, selected_project='', model='', grouped=True, cycle=False, hours=None, start_time=None, end_time=None):
-        self.prepare_quota()
         first = datetime.strptime(start, '%Y-%m-%d').replace(tzinfo=MSK)
         final = datetime.strptime(end, '%Y-%m-%d').replace(tzinfo=MSK) + timedelta(days=1)
         if final <= first:
@@ -77,6 +79,8 @@ class Reports:
                 raise ValueError('Конец периода должен быть позже начала')
             cycle = False
             start, end = first.date().isoformat(), final.date().isoformat()
+        self.ensure_history(first.timestamp() if not cycle else datetime.now(MSK).timestamp()-7*86400)
+        self.prepare_quota()
         con = self.connect()
         try:
             cache=self.quota_cache
@@ -84,16 +88,20 @@ class Reports:
                 first=datetime.fromtimestamp(cache['latest']['reset_at']-10080*60,MSK)
                 final=datetime.now(MSK)
                 start,end=first.date().isoformat(),final.date().isoformat()
+                self.ensure_history(first.timestamp())
+                self.prepare_quota()
             meta = {r['id']: dict(r) for r in con.execute('SELECT * FROM threads')}
             where, params = 'timestamp>=? AND timestamp<?', [first.timestamp(), final.timestamp()]
+            model_where = ''
             if model:
-                where += ' AND model=?'
+                model_where = 'WHERE model=?'
                 params.append(model)
-            rows = con.execute(f'''WITH unique_events AS (SELECT * FROM events GROUP BY event_key)
+            rows = con.execute(f'''WITH unique_events AS (SELECT * FROM events
+                WHERE {where} GROUP BY event_key)
                 SELECT thread,model,effort,SUM(calls) AS calls,
                 SUM(input) AS input,SUM(cached) AS cached,SUM(fresh) AS fresh,
                 SUM(output) AS output,SUM(reasoning) AS reasoning,SUM(total) AS total
-                FROM unique_events WHERE {where} GROUP BY thread,model,effort''', params).fetchall()
+                FROM unique_events {model_where} GROUP BY thread,model,effort''', params).fetchall()
             summary, models, chats, projects = blank(), {}, {}, {}
             quota=self.quota_cache or dict(allocations={},windows=[],blocks=[],latest=None,curve=[],notes=[],covered=set(),events=[])
             pp_by_group=defaultdict(float)
@@ -183,7 +191,8 @@ class Reports:
                 options=dict(projects=sorted({r['project'] for r in meta.values()}),
                              models=[r[0] for r in con.execute('SELECT DISTINCT model FROM events ORDER BY model')]),
                 index=dict(**self.status, indexed_files=con.execute('SELECT COUNT(*) FROM files').fetchone()[0],
-                           events=con.execute('SELECT COUNT(DISTINCT event_key) FROM events').fetchone()[0]),
+                           events=len(quota['events']),
+                           history_start=self.history_start),
                 snapshot=self.status['last_scan'] or (last['value'] if last else None),
                 diagnostics=diagnostics,
                 pricing=dict(date=RATE_DATE, source='https://learn.chatgpt.com/docs/pricing#token-rates',

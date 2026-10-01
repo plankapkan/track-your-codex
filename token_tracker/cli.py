@@ -61,7 +61,7 @@ def main(argv=None, *, open_browser=False):
     except OSError:
         parser.error('Monitor already running for this data directory')
     try:
-        index = Index(args.home, args.data)
+        index = Index(args.home, args.data, lazy=True)
         stop_file = args.data / 'stop'
         stop_file.unlink(missing_ok=True)
         if args.once:

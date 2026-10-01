@@ -20,6 +20,18 @@ Run module commands from the repository root so Python can locate the packages. 
 
 ## Tests
 
+The CLI loads the last seven days on startup and extends history when a report,
+export or chart requests an older boundary. A preceding week is also loaded to
+preserve quota cycles and attribution blocks across the boundary. File selection
+uses modification time, so a resumed old chat is included; selected journals are
+parsed from the beginning to restore context and cumulative counters. Directory
+enumeration still covers the archive, but unchanged old journals are not opened.
+The SQLite index keeps older data; each restart bounds the in-memory quota cache
+again. During a run the loaded range only expands, avoiding repeated backfills.
+`index.events` counts the active accounting cache, including the boundary reserve.
+Direct `Index(...)` maintenance callers retain full-history scanning unless they
+pass `lazy=True`.
+
 ```sh
 python -m unittest discover -s tests -t . -p "test_*.py" -v
 ```

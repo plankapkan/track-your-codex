@@ -8,7 +8,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from .common import ClosingConnection, FIELDS, MSK, RATES, epoch, parent_id, synchronized
-from .quota import build_quota
+from .quota import build_quota, WEEK
 from .reports import Reports
 from .projects import ProjectResolver, validate_root
 
@@ -80,7 +80,7 @@ def validate_record(event):
                     raise ValueError('Token counter outside SQLite integer range')
 
 class Index(Reports):
-    def __init__(self, home, data):
+    def __init__(self, home, data, *, lazy=False):
         self.lock = threading.RLock()
         self._quota_dirty = False
         self.home, self.data = Path(home), Path(data)
@@ -88,6 +88,10 @@ class Index(Reports):
         self.db = self.data / 'usage.sqlite'
         self.status = dict(indexing=False, files_done=0, files_total=0, last_scan=None, error=None)
         self.quota_cache = None
+        # CLI dashboards load history on demand; direct/maintenance users can
+        # still explicitly build the complete index.
+        self.history_start = datetime.now(MSK).timestamp() - WEEK if lazy else None
+        self._history_scanned = False
         con = self.connect()
         con.executescript('''
             PRAGMA journal_mode=WAL;
@@ -351,13 +355,28 @@ class Index(Reports):
                         continue
 
     @synchronized
+    def ensure_history(self, first):
+        if self.history_start is None:
+            return
+        expanded = first < self.history_start
+        if expanded:
+            self.history_start = first
+            self._quota_dirty = True
+        if expanded or not self._history_scanned:
+            self.scan()
+
+    @synchronized
     def prepare_quota(self):
         if self.quota_cache is not None and not self._quota_dirty:
             return
         with self.connect() as con:
+            # A whole preceding week preserves the cycle and attribution block
+            # crossing the requested boundary. Allocate globally before filters.
+            cutoff = self.history_start - WEEK if self.history_start is not None else 0
             samples=[dict(r) for r in con.execute('''SELECT timestamp,limit_id,reset_at,used_percent,plan
-                FROM quota_samples GROUP BY timestamp,limit_id,reset_at,used_percent''')]
-            events=[dict(r) for r in con.execute('SELECT * FROM events GROUP BY event_key')]
+                FROM quota_samples WHERE timestamp>=?
+                GROUP BY timestamp,limit_id,reset_at,used_percent''', (cutoff,))]
+            events=[dict(r) for r in con.execute('SELECT * FROM events WHERE timestamp>=? GROUP BY event_key', (cutoff,))]
         quota=build_quota(samples,events,RATES)
         quota['events']=events
         self.quota_cache=quota
@@ -369,6 +388,12 @@ class Index(Reports):
         try:
             paths = sorted({p for folder in ('sessions', 'archived_sessions')
                             for p in (self.home / folder).rglob('*.jsonl')})
+            if self.history_start is not None:
+                # Creation dates miss resumed old chats. Modification time is a
+                # conservative bound; read selected journals from the beginning
+                # to retain context, inherited counters and fork deduplication.
+                cutoff = self.history_start - WEEK
+                paths = [p for p in paths if p.stat().st_mtime >= cutoff]
             self.status['files_total'] = len(paths)
             for i, path in enumerate(paths):
                 if (self.data / 'stop').exists():
@@ -381,6 +406,7 @@ class Index(Reports):
                 self.status['files_done'] = i + 1
             self.refresh_titles()
             self.prepare_quota()
+            self._history_scanned = not (self.data / 'stop').exists()
             self.status['last_scan'] = datetime.now(MSK).isoformat(timespec='seconds')
             with self.connect() as con:
                 con.execute('INSERT OR REPLACE INTO settings VALUES (?,?)', ('last_scan', self.status['last_scan']))
