@@ -210,6 +210,9 @@ async function refresh() {
   } catch(error) { if(serial!==refreshSerial)return; $('error').textContent=error.message; $('error').hidden=false; $('status').textContent=t('Нет связи с монитором'); }
 }
 function render(data) {
+  for(const note of document.querySelectorAll("[data-help-target]")){
+    for(const target of document.querySelectorAll(note.dataset.helpTarget))target.title=t(note.textContent);
+  }
     $('error').hidden = true;
     updatePeriodControls();
     options('project',data.options.projects,t('Все проекты')); options('model',data.options.models,t('Все модели'));
@@ -419,6 +422,7 @@ function renderQuota(data) {
   const latestTime=quota.latest?dateTime(new Date(quota.latest.timestamp*1000)):t('нет снимка');
   const resetTime=quota.latest?dateTime(new Date(quota.latest.reset_at*1000)):t('неизвестен');
   $('quota-info').textContent=t`Общий счётчик не зависит от фильтра проекта / модели. Последний снимок: ${latestTime} МСК; сброс: ${resetTime} МСК. Доли чатов приблизительные: токены взвешены по кредитным тарифам Standard, прямой формулы списания подписки нет. Покрытие оценкой: ${percent(coverage)} токенов. Без распределения: ${percent(quota.unassigned_block_pp)} наблюдаемого прироста; до исходных снимков: ${percent(quota.period.baseline_not_attributed_pp)}. ${quota.preliminary?t('Последний блок предварительный; оценка меняется при новых снимках.'):''} ${quota.period.windows.length>1?t('Период включает несколько циклов: расход суммируется и может превышать 100%.'):''} Ноль изменений счётчика не означает бесплатную работу.`;
+  $('quota-cards').title=$('quota-info').textContent;
   const models=new Map();
   for(const row of data.models){const model=models.get(row.model)||{label:row.model,value:0,total:0,covered:0,fresh:0,output:0,cached:0};model.value+=row.quota_pp||0;model.total+=row.total;for(const key of ['fresh','output','cached'])model[key]+=row[key];model.covered+=row.quota_covered_tokens||0;models.set(row.model,model);}
   drawQuotaModels([...models.values()].sort((a,b)=>b.value-a.value).map(row=>({...row,display:quotaText({quota_pp:row.value,quota_covered_tokens:row.covered}),detail:t`${number(row.total)} токенов`,components:[{label:t('Новый вход'),value:row.fresh},{label:t('Выход'),value:row.output},{label:t('Кеш'),value:row.cached}]})));

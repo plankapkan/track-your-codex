@@ -4,9 +4,9 @@ See which Codex chats, projects and models use the most tokens. Runs on your com
 
 [Русский](README.ru.md) · [Download](https://github.com/plankapkan/track-your-codex/releases/latest) · [Report a problem](https://github.com/plankapkan/track-your-codex/issues)
 
-![Codex token usage dashboard with three gauges: remaining allowance, usage pace and time remaining, using example data](docs/images/dashboard-en-dark-2026-10-01.jpg)
+![Codex token usage dashboard with three gauges: remaining allowance, usage pace and time remaining, using example data](docs/images/dashboard-en-dark-2026-10-02.png)
 
-[Light theme](docs/images/dashboard-en-light-2026-10-01.jpg)
+[Light theme](docs/images/dashboard-en-light-2026-10-02.png)
 
 ## Run
 
@@ -29,14 +29,16 @@ Upgrading from v0.2.0? Follow the [migration steps](docs/troubleshooting.md#upgr
 
 - Tokens by chat, project and model, with input, cache and output counts.
 - Weekly allowance snapshots, token charts and subagent grouping.
-- Three gauges in one panel: remaining weekly allowance (0–100%), usage pace (%/hour) and time remaining (0–7 days). The pace and time gauges use nonlinear scales to make small values easier to read; allowance spent during the selected period appears below the remaining allowance.
+- Three gauges in one panel: remaining weekly allowance (0–100%), usage pace (%/hour) and time remaining (0–7 days). The pace and time gauges use nonlinear scales to make small values easier to read; units sit inside the dials, with compact numeric readouts below and details available on hover.
 - Filters, chat search and CSV export. English / Russian; light / dark theme.
 
 ## About the numbers
 
 Account percentages come from snapshots in local logs. Shares marked **≈** are estimates weighted by credit rates, not official subscription charges. Cloud chats and other devices may be missing. Times currently use Moscow time (UTC+3).
 
-The pace estimate uses the last three hours of account readings, with more weight on recent data and observed pauses included. Time remaining assumes that pace continues; it is not an official forecast. Stale readings, gaps, resets and insufficient changes suppress the estimate. If the allowance resets before the projected 0%, the gauge says so. The usage dial has a red zone at 40–100 %/hour; the time dial caps its needle at 7 days while keeping the full duration in the number.
+The pace estimate follows the selected range: observed allowance growth divided by observed time. Time averaging smooths short bursts and includes observed pauses without giving frequent snapshots extra weight. Gaps over 30 minutes, resets and decreases are not bridged; missing history is not treated as zero usage. Hover over the pace gauge for observation coverage. Project and model filters do not change the account-wide pace.
+
+Time remaining assumes the selected period's average pace continues; it is not an official forecast. Historical averages remain visible with stale readings, but a forecast requires a fresh account balance. Insufficient observed time or growth suppresses the pace estimate. Hover over the time gauge to check whether a reset is expected before 0%. The usage dial has a red zone at 40–100 %/hour; the time dial caps its needle at 7 days while keeping the full duration in the number.
 
 The monitor runs on `127.0.0.1`, reads Codex's database without changing it and never reads `auth.json`. It makes no model calls. Its local database stores counters and chat metadata, not message text.
 
