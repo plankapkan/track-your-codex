@@ -1,9 +1,90 @@
 """Conditional attribution of observed account quota changes, never per-request billing."""
 from collections import defaultdict
+import math
 
 WEEK = 10080 * 60
 RESET_TOLERANCE = 60  # The service can return reset timestamps differing by a few seconds.
 BLOCK_PP = 5
+
+def consumption_pace(quota, now):
+    """Estimate account percentage points/hour from recent observations only.
+
+    Integrate interval slopes with a 45-minute exponential half-life over three
+    hours. Time weighting makes duplicated / frequent snapshots harmless and
+    includes observed pauses. Never bridge a reset, a decrease or a >30m gap.
+    Rounded plateaus are unknown consumption, not proof of a zero rate.
+    """
+    result = dict(status='insufficient', pp_per_hour=None, eta_seconds=None,
+                  reset_before_exhaustion=None, span_seconds=0, growth_pp=0,
+                  sample_age_seconds=None)
+    latest = quota.get('latest')
+    if latest is None:
+        return result
+    age = max(0, now-latest['timestamp'])
+    result['sample_age_seconds'] = age
+    if now >= latest['reset_at']:
+        result['status'] = 'reset_due'
+        return result
+    if age > 900:
+        result['status'] = 'stale'
+        return result
+    if latest['used_percent'] >= 100:
+        result.update(status='exhausted', eta_seconds=0)
+        return result
+    # build_quota already canonicalizes reset timestamp jitter and limit IDs.
+    points = [p for p in quota['curve']
+              if abs(p['reset_at']-latest['reset_at']) <= RESET_TOLERANCE
+              and latest['timestamp']-10800-1800 <= p['timestamp'] <= latest['timestamp']]
+    rows = []
+    for index, point in enumerate(points):
+        if rows and 0 < rows[-1]['used_percent']-point['used_percent'] <= 1:
+            if any(future['used_percent'] >= rows[-1]['used_percent']
+                   for future in points[index+1:]
+                   if future['timestamp']-point['timestamp'] <= 120):
+                continue  # Same short recovered lag heuristic as attribution.
+        if rows and point['timestamp'] == rows[-1]['timestamp']:
+            if point['used_percent'] != rows[-1]['used_percent']:
+                rows = []  # Conflicting simultaneous account readings.
+        elif rows and (point['timestamp']-rows[-1]['timestamp'] > 1800
+                       or point['used_percent'] < rows[-1]['used_percent']):
+            rows = []
+        rows.append(point)
+    if not rows or rows[-1]['used_percent'] != latest['used_percent']:
+        result['status'] = 'inconsistent'
+        return result
+    end = latest['timestamp']
+    cutoff = end-10800
+    decay = math.log(2)/2700
+    weighted_growth = weighted_time = growth = span = 0.
+    for left, right in zip(rows, rows[1:]):
+        start = max(cutoff, left['timestamp'])
+        stop = right['timestamp']
+        if stop <= start:
+            continue
+        duration = stop-left['timestamp']
+        delta = right['used_percent']-left['used_percent']
+        weight = (math.exp(-decay*(end-stop))-math.exp(-decay*(end-start)))/decay
+        weighted_growth += delta/duration*weight
+        weighted_time += weight
+        growth += delta*(stop-start)/duration
+        span += stop-start
+    result.update(span_seconds=span, growth_pp=growth)
+    if span < 900:
+        return result
+    if growth < 2:
+        result['status'] = 'below_resolution'
+        return result
+    # Stop extrapolating old work when fresh readings have been flat for 45m.
+    last_change = next((r['timestamp'] for l, r in reversed(list(zip(rows, rows[1:])))
+                        if r['used_percent'] > l['used_percent']), None)
+    if last_change is None or end-last_change >= 2700:
+        result['status'] = 'quiet'
+        return result
+    speed = weighted_growth/weighted_time*3600
+    eta = (100-latest['used_percent'])/speed*3600
+    result.update(status='ok', pp_per_hour=speed, eta_seconds=eta,
+                  reset_before_exhaustion=now+eta >= latest['reset_at'])
+    return result
 
 def build_quota(samples, events, rates):
     """Use global, unfiltered history. Filtering must happen after attribution.

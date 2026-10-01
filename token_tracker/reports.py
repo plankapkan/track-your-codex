@@ -4,7 +4,7 @@ import io
 from collections import defaultdict
 from datetime import datetime, timedelta
 from .common import MSK, RATE_DATE, RATES, blank, add, cost, synchronized
-from .quota import period_observation
+from .quota import period_observation, consumption_pace
 
 class Reports:
     @synchronized
@@ -158,6 +158,7 @@ class Reports:
             observation=period_observation(quota,first.timestamp(),final.timestamp())
             blocks=[b for b in quota['blocks'] if b['end']>=first.timestamp() and b['start']<final.timestamp()]
             quota_view=dict(latest=quota['latest'],period=observation,
+                pace=consumption_pace(quota, datetime.now(MSK).timestamp()),
                 account_scope='all_local_account_observations',estimated_selected_pp=summary['quota_pp'],
                 unassigned_block_pp=sum(b['unassigned_pp'] for b in blocks),
                 curve=[p for p in quota['curve'] if first.timestamp()<=p['timestamp']<final.timestamp()],

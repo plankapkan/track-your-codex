@@ -1,6 +1,6 @@
 import unittest
 import sqlite3
-from token_tracker.quota import build_quota, period_observation
+from token_tracker.quota import build_quota, period_observation, consumption_pace
 from token_tracker.common import RATES
 from tests import test_monitor as fixtures
 from tests.test_monitor import meta,context,usage
@@ -76,6 +76,65 @@ class QuotaTests(unittest.TestCase):
         self.assertAlmostEqual(q['allocations']['b'],2)
         self.assertEqual(sum(b['delta_pp'] for b in q['blocks']),7)
 
+class PaceTests(unittest.TestCase):
+    def pace(self, samples, now=None):
+        return consumption_pace(build_quota(samples, [], RATES),
+                                samples[-1]['timestamp'] if now is None else now)
+
+    def test_constant_rate_duplicates_and_sampling_density(self):
+        sparse=[sample(t,10+t/600) for t in range(0,3601,600)]
+        dense=[sample(t,10+t/600) for t in range(0,3601,60)]
+        for rows in (sparse, dense, sparse+sparse):
+            pace=self.pace(rows,3600)
+            self.assertEqual(pace['status'],'ok')
+            self.assertAlmostEqual(pace['pp_per_hour'],6)
+            self.assertAlmostEqual(pace['eta_seconds'],84/6*3600)
+
+    def test_recent_work_has_more_weight_and_plateau_slows_speed(self):
+        steady=[sample(t,10+t/600) for t in range(0,3601,600)]
+        faster=[sample(t,10+t/600+max(0,t-1800)/600) for t in range(0,3601,600)]
+        self.assertGreater(self.pace(faster)['pp_per_hour'],self.pace(steady)['pp_per_hour'])
+        paused=steady+[sample(4200,16),sample(4800,16)]
+        self.assertLess(self.pace(paused)['pp_per_hour'],6)
+        paused += [sample(t,16) for t in (5400,6000,6600)]
+        self.assertEqual(self.pace(paused)['status'],'quiet')
+        self.assertIsNone(self.pace(paused)['eta_seconds'])
+
+    def test_rounding_short_history_and_stale_are_not_zero(self):
+        cases=[([sample(0,10)],0,'insufficient'),
+               ([sample(0,10),sample(60,15)],60,'insufficient'),
+               ([sample(0,10),sample(900,11)],900,'below_resolution'),
+               ([sample(0,10),sample(900,10)],900,'below_resolution'),
+               ([sample(0,10),sample(900,15)],1801,'stale')]
+        for rows,now,status in cases:
+            with self.subTest(status=status):
+                pace=self.pace(rows,now)
+                self.assertEqual(pace['status'],status)
+                self.assertIsNone(pace['pp_per_hour'])
+                self.assertIsNone(pace['eta_seconds'])
+
+    def test_gaps_resets_and_persistent_decreases_restart_history(self):
+        old=[sample(0,10),sample(900,15),sample(1800,20)]
+        for tail in ([sample(4000,40)], [sample(1900,1)],
+                     [sample(1900,1,RESET+3600)]):
+            pace=self.pace(old+tail)
+            self.assertEqual(pace['status'],'insufficient')
+        recovered=old+[sample(1810,19),sample(1820,20),sample(2400,22)]
+        self.assertEqual(self.pace(recovered)['status'],'ok')
+
+    def test_reset_eta_and_exhausted(self):
+        rows=[sample(0,10,3600),sample(900,15,3600)]
+        self.assertTrue(self.pace(rows)['reset_before_exhaustion'])
+        self.assertEqual(self.pace(rows,3600)['status'],'reset_due')
+        pace=self.pace([sample(0,95),sample(900,100)])
+        self.assertEqual(pace['status'],'exhausted')
+        self.assertEqual(pace['eta_seconds'],0)
+
+    def test_lookback_excludes_old_work(self):
+        rows=[sample(t,10+min(t,1800)/600) for t in range(0,14401,600)]
+        self.assertEqual(self.pace(rows)['status'],'below_resolution')
+        self.assertEqual(self.pace(rows)['span_seconds'],10800)
+
 class IntegrationQuotaTests(unittest.TestCase):
     setUp=fixtures.MonitorTests.setUp
     tearDown=fixtures.MonitorTests.tearDown
@@ -95,6 +154,8 @@ class IntegrationQuotaTests(unittest.TestCase):
         self.index.scan()
         result=self.report()
         filtered=self.report(model='gpt-6-astra')
+        for key in ('status','pp_per_hour','eta_seconds','span_seconds','growth_pp'):
+            self.assertEqual(result['quota']['pace'][key],filtered['quota']['pace'][key])
         self.assertEqual(result['quota']['latest']['used_percent'],4)
         self.assertAlmostEqual(result['summary']['quota_pp'],4)
         self.assertAlmostEqual(filtered['summary']['quota_pp'],4)
