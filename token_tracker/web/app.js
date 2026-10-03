@@ -147,38 +147,21 @@ function modelReport(models) {
   table.append(body);report.append(table);
   return report;
 }
-function sizeRankings() {
-  const section = document.querySelector('.usage-rankings');
-  const panels = [...section.querySelectorAll('.ranking-panel')];
-  if (getComputedStyle(section).gridTemplateColumns.split(' ').length < 2) {
-    section.style.removeProperty('--ranking-height');
-    return;
-  }
-  // Measure unconstrained content, including expanded model reports.
-  const heights = panels.map(panel => {
-    const viewport = panel.querySelector('.ranking-viewport');
-    const list = viewport.firstElementChild;
-    return list.getBoundingClientRect().height + panel.getBoundingClientRect().height - viewport.getBoundingClientRect().height;
-  });
-  section.style.setProperty('--ranking-height', Math.ceil(Math.min(...heights))+'px');
-}
-const rankingResizeObserver = new ResizeObserver(sizeRankings);
-window.addEventListener('resize', sizeRankings);
 function renderRankings(data) {
-  rankingResizeObserver.disconnect();
   for (const [target,key] of [['top-projects','project'],['top-chats','thread']]) {
     const viewport = $(target);
     const opened = new Set([...viewport.querySelectorAll('details[open]')].map(item=>item.dataset.id));
-    const scrollTop = viewport.scrollTop;
+    viewport.closest('.ranking-panel').classList.toggle('ranking-chats',key==='thread');
     const container = document.createElement('div'); container.className='ranking-list';
     viewport.replaceChildren(container);
-    rankingResizeObserver.observe(container);
     const rows = rankingGroups(data.chats,key);
     if (!rows.length) {
       const empty=document.createElement('p'); empty.className='note'; empty.textContent=t('За этот период данных нет.'); container.append(empty); continue;
     }
     const headings=document.createElement('div'); headings.className='ranking-columns';
-    for (const label of ['',t('Всего токенов'),t('Недельный лимит ≈')]) {const span=document.createElement('span');span.textContent=label;headings.append(span);}
+    headings.classList.toggle('ranking-chat-columns',key==='thread');
+    const labels=key==='thread'?['',t('Проект'),t('Всего токенов'),t('Недельный лимит ≈')]:['',t('Всего токенов'),t('Недельный лимит ≈')];
+    for (const label of labels) {const span=document.createElement('span');span.textContent=label;headings.append(span);}
     container.append(headings);
     rows.forEach((row,index)=>{
       const item=document.createElement('details');item.className='ranking-item';item.dataset.id=String(row.id);item.open=opened.has(String(row.id));
@@ -186,16 +169,16 @@ function renderRankings(data) {
       const name=document.createElement('span');name.className='ranking-name';
       const rank=document.createElement('span');rank.className='ranking-position';rank.textContent=String(index+1);
       const title=document.createElement('span');title.className='ranking-title';title.textContent=row.title;
-      if(key==='thread') {const meta=document.createElement('small');meta.textContent=t(row.project);title.append(meta);}
+      title.title=row.title;
       name.append(rank,title);
+      summary.append(name);
+      if(key==='thread') {const project=document.createElement('span');project.className='ranking-project';project.textContent=t(row.project);project.title=t(row.project);summary.append(project);}
       const tokens=document.createElement('strong');tokens.textContent=number(row.total);
       const quota=document.createElement('span');quota.className='ranking-quota';quota.textContent=quotaText(row);
-      summary.append(name,tokens,quota);
+      summary.append(tokens,quota);
       item.append(summary,modelReport(row.models.values()));container.append(item);
     });
-    viewport.scrollTop = scrollTop;
   }
-  sizeRankings();
 }
 async function refresh() {
   if (!$('filters').reportValidity()) return;
