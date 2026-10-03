@@ -4,9 +4,9 @@ See which Codex chats, projects and models use the most tokens. Runs on your com
 
 [Русский](README.ru.md) · [Download](https://github.com/plankapkan/track-your-codex/releases/latest) · [Report a problem](https://github.com/plankapkan/track-your-codex/issues)
 
-![Codex token usage dashboard with three gauges: remaining allowance, usage pace and time remaining, using example data](docs/images/dashboard-en-dark-2026-10-02.png)
+![Codex token usage dashboard with three gauges: remaining allowance, usage pace and time remaining, using example data](docs/images/dashboard-en-dark-2026-10-03.jpg)
 
-[Light theme](docs/images/dashboard-en-light-2026-10-02.png)
+[Light theme](docs/images/dashboard-en-light-2026-10-03.jpg)
 
 ## Run
 

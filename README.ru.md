@@ -4,9 +4,9 @@
 
 [English](README.md) · [Скачать](https://github.com/plankapkan/track-your-codex/releases/latest) · [Сообщить о проблеме](https://github.com/plankapkan/track-your-codex/issues)
 
-![Монитор расхода Codex с тремя приборами: остаток лимита, темп расхода и запас времени, на вымышленных данных](docs/images/dashboard-ru-dark-2026-10-02.png)
+![Монитор расхода Codex с тремя приборами: остаток лимита, темп расхода и запас времени, на вымышленных данных](docs/images/dashboard-ru-dark-2026-10-03.jpg)
 
-[Светлая тема](docs/images/dashboard-ru-light-2026-10-02.png)
+[Светлая тема](docs/images/dashboard-ru-light-2026-10-03.jpg)
 
 ## Запуск
 
